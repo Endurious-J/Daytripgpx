@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MotoRoute Planner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0e0f;
+    --surface: #141618;
+    --surface2: #1c1f22;
+    --border: #2a2d31;
+    --accent: #e8500a;
+    --accent2: #f5a623;
+    --text: #e8e6e1;
+    --muted: #6a6865;
+    --success: #4caf6e;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Barlow', sans-serif;
+    font-weight: 300;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 999;
+  }
+
+  /* ─── HEADER ─── */
+  header {
+    display: flex; align-items: center; gap: 1.2rem;
+    padding: 0.9rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0; background: var(--surface);
+  }
+  .logo-mark {
+    width: 36px; height: 36px; background: var(--accent);
+    clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .logo-mark svg { width: 18px; height: 18px; fill: white; }
+  h1 { font-family:'Barlow Condensed',sans-serif; font-weight:900; font-size:1.6rem; letter-spacing:0.05em; text-transform:uppercase; }
+  h1 span { color: var(--accent); }
+  .tagline { font-size:0.68rem; color:var(--muted); letter-spacing:0.14em; text-transform:uppercase; margin-top:0.1rem; }
+  .header-right { margin-left:auto; display:flex; align-items:center; gap:0.75rem; }
+
+  .live-badge { display:none; align-items:center; gap:0.4rem; font-size:0.68rem; color:var(--success); letter-spacing:0.08em; text-transform:uppercase; font-family:'Barlow Condensed',sans-serif; font-weight:600; }
+  .live-badge.visible { display:flex; }
+  .live-dot { width:6px; height:6px; border-radius:50%; background:var(--success); animation:pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+
+  /* ─── LAYOUT ─── */
+  .main-layout { display:grid; grid-template-columns:360px 1fr; flex:1; overflow:hidden; }
+
+  /* ─── SIDEBAR ─── */
+  .sidebar { display:flex; flex-direction:column; border-right:1px solid var(--border); overflow:hidden; background:var(--surface); }
+  .sidebar-scroll { flex:1; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--border) transparent; }
+  .sidebar-scroll::-webkit-scrollbar { width:3px; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  /* ─── PANELS ─── */
+  .panel { border-bottom:1px solid var(--border); }
+  .panel-head { display:flex; align-items:center; gap:0.6rem; padding:0.7rem 1.2rem; background:var(--bg); }
+  .panel-num { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.65rem; color:var(--accent); background:rgba(232,80,10,0.15); border:1px solid rgba(232,80,10,0.3); width:20px; height:20px; border-radius:3px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .panel-title { font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:0.78rem; letter-spacing:0.12em; text-transform:uppercase; }
+  .panel-body { padding:0.85rem 1.2rem; }
+
+  /* ─── UPLOAD ─── */
+  .upload-zone { border:2px dashed var(--border); border-radius:6px; padding:1.1rem; text-align:center; cursor:pointer; transition:all 0.2s; position:relative; }
+  .upload-zone:hover,.upload-zone.drag-over { border-color:var(--accent); background:rgba(232,80,10,0.04); }
+  .upload-zone input[type="file"] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+  .upload-icon { font-size:1.4rem; opacity:0.3; margin-bottom:0.25rem; }
+  .upload-text { font-size:0.74rem; color:var(--muted); line-height:1.5; }
+  .upload-text strong { color:var(--text); display:block; font-weight:500; }
+  .file-list { margin-top:0.55rem; display:flex; flex-direction:column; gap:0.3rem; }
+  .file-item { display:flex; align-items:center; gap:0.5rem; background:var(--surface2); border-radius:4px; padding:0.42rem 0.65rem; font-size:0.74rem; }
+  .fi-icon { color:var(--accent); }
+  .fi-name { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .fi-pts { color:var(--muted); font-size:0.66rem; white-space:nowrap; }
+  .fi-del { cursor:pointer; color:var(--muted); background:none; border:none; font-size:0.9rem; padding:0; transition:color 0.15s; }
+  .fi-del:hover { color:#ff5555; }
+
+  /* ─── FORM CONTROLS ─── */
+  .field-label { display:block; font-size:0.66rem; letter-spacing:0.09em; text-transform:uppercase; color:var(--muted); margin-bottom:0.28rem; }
+  .field-group { margin-bottom:0.65rem; }
+  .field-group:last-child { margin-bottom:0; }
+  .input-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:0.55rem; }
+
+  input[type="number"],input[type="text"],input[type="date"] {
+    width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:5px;
+    color:var(--text); font-family:'Barlow',sans-serif; font-size:0.84rem;
+    padding:0.46rem 0.7rem; outline:none; transition:border-color 0.15s; appearance:none; -webkit-appearance:none;
+  }
+  input[type="number"]:focus,input[type="text"]:focus,input[type="date"]:focus { border-color:var(--accent); }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter:invert(0.5); cursor:pointer; }
+
+  .number-with-unit { display:flex; align-items:stretch; background:var(--surface2); border:1px solid var(--border); border-radius:5px; overflow:hidden; transition:border-color 0.15s; }
+  .number-with-unit:focus-within { border-color:var(--accent); }
+  .number-with-unit input { flex:1; border:none; background:transparent; padding:0.46rem 0.6rem; border-radius:0; min-width:0; }
+  .number-with-unit input:focus { outline:none; }
+  .nwu-unit { padding:0 0.55rem; font-size:0.65rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; white-space:nowrap; border-left:1px solid var(--border); display:flex; align-items:center; background:rgba(0,0,0,0.15); }
+
+  /* ─── ACCOMMODATION ─── */
+  .accom-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.45rem; }
+  .accom-btn { background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:0.6rem 0.3rem; text-align:center; cursor:pointer; transition:all 0.18s; display:flex; flex-direction:column; align-items:center; gap:0.22rem; }
+  .accom-btn:hover { border-color:rgba(232,80,10,0.5); }
+  .accom-btn.active { border-color:var(--accent); background:rgba(232,80,10,0.1); box-shadow:0 0 0 1px rgba(232,80,10,0.2); }
+  .ab-icon { font-size:1.15rem; }
+  .ab-label { font-size:0.6rem; color:var(--muted); letter-spacing:0.06em; text-transform:uppercase; }
+  .accom-btn.active .ab-label { color:var(--accent); }
+
+  /* ─── POI ─── */
+  .poi-list { display:flex; flex-direction:column; gap:0.35rem; margin-bottom:0.55rem; }
+  .poi-item { background:var(--surface2); border:1px solid var(--border); border-radius:5px; padding:0.45rem 0.65rem; display:flex; gap:0.5rem; align-items:center; }
+  .poi-dot { width:8px; height:8px; border-radius:50%; background:var(--accent2); flex-shrink:0; }
+  .poi-info { flex:1; min-width:0; }
+  .poi-name { font-size:0.77rem; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .poi-coords { font-size:0.63rem; color:var(--muted); font-family:monospace; }
+  .poi-del { cursor:pointer; color:var(--muted); background:none; border:none; font-size:0.85rem; padding:0; transition:color 0.15s; }
+  .poi-del:hover { color:#ff5555; }
+  .poi-add { display:flex; flex-direction:column; gap:0.38rem; }
+  .poi-coord-row { display:grid; grid-template-columns:1fr 1fr; gap:0.38rem; }
+
+  /* ─── BUTTONS ─── */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:0.4rem; border:none; border-radius:5px; cursor:pointer; font-family:'Barlow Condensed',sans-serif; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; transition:all 0.18s; white-space:nowrap; }
+  .btn-sm { padding:0.38rem 0.7rem; font-size:0.73rem; }
+  .btn-md { padding:0.55rem 1rem; font-size:0.82rem; }
+  .btn-full { width:100%; }
+  .btn-ghost { background:var(--surface2); border:1px solid var(--border); color:var(--muted); }
+  .btn-ghost:hover { border-color:var(--accent); color:var(--text); }
+  .btn-accent { background:var(--accent); color:white; }
+  .btn-accent:hover { background:#c43d00; }
+  .btn-success { background:var(--success); color:white; }
+  .btn-success:hover { background:#3d9658; }
+
+  /* ─── SIDEBAR FOOTER ─── */
+  .sidebar-footer { padding:0.85rem 1.2rem; border-top:1px solid var(--border); background:var(--bg); flex-shrink:0; display:flex; gap:0.55rem; }
+
+  /* ─── PREVIEW ─── */
+  .preview-area { display:flex; flex-direction:column; overflow:hidden; }
+  .preview-toolbar { display:flex; align-items:center; gap:1rem; padding:0.58rem 1.2rem; border-bottom:1px solid var(--border); flex-shrink:0; background:var(--surface); }
+  .preview-toolbar-title { font-family:'Barlow Condensed',sans-serif; font-size:0.75rem; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); flex:1; }
+  .map-container { flex:1; position:relative; overflow:hidden; }
+  #map-canvas { width:100%; height:100%; display:block; }
+  .map-placeholder { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.6rem; color:var(--muted); pointer-events:none; }
+  .map-placeholder-icon { font-size:3.5rem; opacity:0.1; }
+  .map-placeholder-text { font-family:'Barlow Condensed',sans-serif; font-size:0.9rem; letter-spacing:0.12em; text-transform:uppercase; opacity:0.25; }
+  .map-placeholder-sub { font-size:0.7rem; opacity:0.18; }
+
+  /* ─── LEGEND ─── */
+  .day-legend { position:absolute; top:1rem; right:1rem; background:rgba(13,14,15,0.93); border:1px solid var(--border); border-radius:6px; padding:0.65rem 0.85rem; min-width:165px; display:none; backdrop-filter:blur(10px); max-height:calc(100% - 2rem); overflow-y:auto; }
+  .day-legend.visible { display:block; }
+  .dl-title { font-family:'Barlow Condensed',sans-serif; font-size:0.63rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:0.45rem; }
+  .dl-item { display:flex; align-items:center; gap:0.5rem; padding:0.2rem 0; font-size:0.73rem; }
+  .dl-color { width:16px; height:3px; border-radius:2px; flex-shrink:0; }
+  .dl-day { font-weight:500; }
+  .dl-km { font-size:0.63rem; color:var(--muted); }
+  .dl-date { font-size:0.6rem; color:var(--muted); opacity:0.7; }
+
+  /* ─── STATS ─── */
+  .stats-bar { display:none; border-top:1px solid var(--border); padding:0.58rem 1.5rem; gap:1.8rem; flex-wrap:wrap; flex-shrink:0; background:var(--surface); }
+  .stats-bar.visible { display:flex; }
+  .stat { display:flex; flex-direction:column; gap:0.03rem; }
+  .stat-val { font-family:'Barlow Condensed',sans-serif; font-size:1.25rem; font-weight:700; color:var(--accent); }
+  .stat-label { font-size:0.61rem; color:var(--muted); letter-spacing:0.07em; text-transform:uppercase; }
+
+  /* ─── TOAST ─── */
+  .toast { position:fixed; bottom:1.5rem; right:1.5rem; background:var(--surface2); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:6px; padding:0.65rem 1rem; font-size:0.78rem; z-index:9999; transform:translateX(120%); transition:transform 0.3s cubic-bezier(0.16,1,0.3,1); max-width:270px; line-height:1.4; }
+  .toast.show { transform:translateX(0); }
+  .toast.success { border-left-color:var(--success); }
+
+  @media (max-width:760px) {
+    body { overflow:auto; }
+    .main-layout { grid-template-columns:1fr; height:auto; }
+    .sidebar { height:auto; overflow:visible; }
+    .sidebar-scroll { overflow:visible; }
+    .preview-area { height:65vw; min-height:280px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">
+    <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7zm2.85 11.1l-.85.6V16h-4v-2.3l-.85-.6C7.8 12.16 7 10.63 7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.63-.8 3.16-2.15 4.1z"/></svg>
+  </div>
+  <div>
+    <h1>Moto<span>Route</span></h1>
+    <div class="tagline">Motorcycle Trip Planner</div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge" id="liveBadge"><div class="live-dot"></div>Live preview</div>
+  </div>
+</header>
+
+<div class="main-layout">
+
+  <!-- ══ SIDEBAR ══ -->
+  <aside class="sidebar">
+    <div class="sidebar-scroll">
+
+      <!-- 1. GPX FILES -->
+      <div class="panel">
+        <div class="panel-head"><div class="panel-num">1</div><div class="panel-title">GPX Files</div></div>
+        <div class="panel-body">
+          <div class="upload-zone" id="uploadZone">
+            <input type="file" id="gpxInput" accept=".gpx" multiple>
+            <div class="upload-icon">🗺️</div>
+            <div class="upload-text"><strong>Drop GPX files here</strong>or click to browse · multiple files OK</div>
+          </div>
+          <div class="file-list" id="fileList"></div>
+        </div>
+      </div>
+
+      <!-- 2. DAILY SETTINGS -->
+      <div class="panel">
+        <div class="panel-head"><div class="panel-num">2</div><div class="panel-title">Daily Riding</div></div>
+        <div class="panel-body">
+          <div class="input-grid-2" style="margin-bottom:0.65rem">
+            <div class="field-group">
+              <label class="field-label">Max km / day</label>
+              <div class="number-with-unit"><input type="number" id="maxKm" value="300" min="50" max="800" step="10"><span class="nwu-unit">km</span></div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Max hours / day</label>
+              <div class="number-with-unit"><input type="number" id="maxHours" value="6" min="1" max="16" step="0.5"><span class="nwu-unit">h</span></div>
+            </div>
+          </div>
+          <div class="input-grid-2" style="margin-bottom:0.65rem">
+            <div class="field-group">
+              <label class="field-label">Avg speed</label>
+              <div class="number-with-unit"><input type="number" id="avgSpeed" value="60" min="20" max="120" step="5"><span class="nwu-unit">km/h</span></div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Stops / day</label>
+              <div class="number-with-unit"><input type="number" id="stopsPerDay" value="3" min="0" max="10"><span class="nwu-unit">stops</span></div>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Start date (optional)</label>
+            <input type="date" id="startDate">
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. ACCOMMODATION -->
+      <div class="panel">
+        <div class="panel-head"><div class="panel-num">3</div><div class="panel-title">Accommodation</div></div>
+        <div class="panel-body">
+          <div class="accom-grid">
+            <div class="accom-btn" data-accom="wild" onclick="setAccom(this)"><div class="ab-icon">🏕️</div><div class="ab-label">Wild camp</div></div>
+            <div class="accom-btn active" data-accom="campsite" onclick="setAccom(this)"><div class="ab-icon">⛺</div><div class="ab-label">Campsite</div></div>
+            <div class="accom-btn" data-accom="hotel" onclick="setAccom(this)"><div class="ab-icon">🏨</div><div class="ab-label">Hotel</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. POIs -->
+      <div class="panel">
+        <div class="panel-head"><div class="panel-num">4</div><div class="panel-title">Points of Interest</div></div>
+        <div class="panel-body">
+          <div class="poi-list" id="poiList"></div>
+          <div class="poi-add">
+            <input type="text" id="poiName" placeholder="Name (e.g. Viewpoint, Fuel stop…)">
+            <div class="poi-coord-row">
+              <input type="number" id="poiLat" placeholder="Latitude" step="0.000001">
+              <input type="number" id="poiLon" placeholder="Longitude" step="0.000001">
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="addPOI()">+ Add POI</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /sidebar-scroll -->
+
+    <div class="sidebar-footer">
+      <button class="btn btn-accent btn-md" style="flex:1" onclick="generatePlan()">⚡ Generate Plan</button>
+      <button class="btn btn-success btn-md" id="exportBtn" onclick="exportAllDays()" style="display:none">⬇ Export GPX</button>
+    </div>
+  </aside>
+
+  <!-- ══ PREVIEW ══ -->
+  <div class="preview-area">
+    <div class="preview-toolbar">
+      <span class="preview-toolbar-title">Route Preview</span>
+      <span id="previewHint" style="font-size:0.7rem;color:var(--muted)">Upload a GPX to get started</span>
+    </div>
+    <div class="map-container">
+      <canvas id="map-canvas"></canvas>
+      <div class="map-placeholder" id="mapPlaceholder">
+        <div class="map-placeholder-icon">🏍️</div>
+        <div class="map-placeholder-text">No route loaded</div>
+        <div class="map-placeholder-sub">Upload a GPX file to begin planning</div>
+      </div>
+      <div class="day-legend" id="dayLegend">
+        <div class="dl-title">Day Segments</div>
+        <div id="legendItems"></div>
+      </div>
+    </div>
+    <div class="stats-bar" id="statsBar">
+      <div class="stat"><div class="stat-val" id="statTotal">—</div><div class="stat-label">Total km</div></div>
+      <div class="stat"><div class="stat-val" id="statDays">—</div><div class="stat-label">Days</div></div>
+      <div class="stat"><div class="stat-val" id="statAvgDay">—</div><div class="stat-label">Avg km/day</div></div>
+      <div class="stat"><div class="stat-val" id="statPOIs">—</div><div class="stat-label">POIs</div></div>
+      <div class="stat"><div class="stat-val" id="statAccom">—</div><div class="stat-label">Sleep</div></div>
+    </div>
+  </div>
+
+</div><!-- /main-layout -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+const state = {
+  gpxFiles: [],
+  pois: [],
+  accommodation: 'campsite',
+  plan: null,
+  liveEnabled: false,
+};
+
+const DAY_COLORS = [
+  '#e8500a','#f5a623','#4caf6e','#2196f3','#9c27b0',
+  '#f44336','#00bcd4','#ff5722','#8bc34a','#3f51b5',
+  '#e91e63','#ff9800','#009688','#673ab7','#cddc39',
+];
+
+// ══════════════════════════════════════════
+// GPX PARSING
+// ══════════════════════════════════════════
+function parseGPX(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const pts = doc.querySelectorAll('trkpt, rtept, wpt');
+  const points = [];
+  pts.forEach(pt => {
+    const lat = parseFloat(pt.getAttribute('lat'));
+    const lon = parseFloat(pt.getAttribute('lon'));
+    if (!isNaN(lat) && !isNaN(lon)) {
+      points.push({
+        lat, lon,
+        ele: parseFloat(pt.querySelector('ele')?.textContent || 0) || 0,
+        time: pt.querySelector('time')?.textContent || null,
+      });
+    }
+  });
+  return points;
+}
+
+function haversine(a, b) {
+  const R = 6371, dLat=(b.lat-a.lat)*Math.PI/180, dLon=(b.lon-a.lon)*Math.PI/180;
+  const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+function totalDistance(pts) {
+  let d = 0;
+  for (let i = 1; i < pts.length; i++) d += haversine(pts[i-1], pts[i]);
+  return d;
+}
+
+function getAllPoints() { return state.gpxFiles.flatMap(f => f.points); }
+
+// ══════════════════════════════════════════
+// FILE HANDLING
+// ══════════════════════════════════════════
+const gpxInput = document.getElementById('gpxInput');
+const uploadZone = document.getElementById('uploadZone');
+
+gpxInput.addEventListener('change', e => handleFiles(e.target.files));
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  handleFiles(e.dataTransfer.files);
+});
+
+function handleFiles(files) {
+  Array.from(files).forEach(file => {
+    if (!file.name.toLowerCase().endsWith('.gpx')) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const points = parseGPX(e.target.result);
+      if (!points.length) { showToast('No track points found in ' + file.name); return; }
+      state.gpxFiles = state.gpxFiles.filter(f => f.name !== file.name);
+      state.gpxFiles.push({ name: file.name, points });
+      renderFileList();
+      onSettingsChange();
+      showToast(`${file.name}: ${points.length} pts · ${totalDistance(points).toFixed(0)} km`, 'success');
+    };
+    reader.readAsText(file);
+  });
+}
+
+function removeFile(name) {
+  state.gpxFiles = state.gpxFiles.filter(f => f.name !== name);
+  state.plan = null;
+  renderFileList();
+  onSettingsChange();
+}
+
+function renderFileList() {
+  const el = document.getElementById('fileList');
+  el.innerHTML = '';
+  state.gpxFiles.forEach(f => {
+    const dist = totalDistance(f.points);
+    const safeName = f.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    el.innerHTML += `
+      <div class="file-item">
+        <span class="fi-icon">📄</span>
+        <span class="fi-name" title="${f.name}">${f.name}</span>
+        <span class="fi-pts">${f.points.length}pts·${dist.toFixed(0)}km</span>
+        <button class="fi-del" onclick="removeFile('${safeName}')">✕</button>
+      </div>`;
+  });
+}
+
+// ══════════════════════════════════════════
+// ACCOMMODATION
+// ══════════════════════════════════════════
+function setAccom(el) {
+  document.querySelectorAll('.accom-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  state.accommodation = el.dataset.accom;
+  onSettingsChange();
+}
+
+// ══════════════════════════════════════════
+// POIs
+// ══════════════════════════════════════════
+function addPOI() {
+  const name = document.getElementById('poiName').value.trim() || 'POI';
+  const lat = parseFloat(document.getElementById('poiLat').value);
+  const lon = parseFloat(document.getElementById('poiLon').value);
+  if (isNaN(lat) || isNaN(lon)) { showToast('Enter valid coordinates'); return; }
+  state.pois.push({ name, lat, lon });
+  document.getElementById('poiName').value = '';
+  document.getElementById('poiLat').value = '';
+  document.getElementById('poiLon').value = '';
+  renderPOIs();
+  onSettingsChange();
+}
+
+function removePOI(i) {
+  state.pois.splice(i, 1);
+  renderPOIs();
+  onSettingsChange();
+}
+
+function renderPOIs() {
+  const el = document.getElementById('poiList');
+  el.innerHTML = '';
+  state.pois.forEach((p, i) => {
+    el.innerHTML += `
+      <div class="poi-item">
+        <div class="poi-dot"></div>
+        <div class="poi-info">
+          <div class="poi-name">${p.name}</div>
+          <div class="poi-coords">${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}</div>
+        </div>
+        <button class="poi-del" onclick="removePOI(${i})">✕</button>
+      </div>`;
+  });
+}
+
+// ══════════════════════════════════════════
+// LIVE SETTINGS LISTENER
+// ══════════════════════════════════════════
+let liveDebounce = null;
+
+function onSettingsChange() {
+  if (!state.gpxFiles.length) { drawEmpty(); return; }
+  state.liveEnabled = true;
+  document.getElementById('liveBadge').classList.add('visible');
+  clearTimeout(liveDebounce);
+  liveDebounce = setTimeout(() => generatePlan(true), 320);
+}
+
+['maxKm','maxHours','avgSpeed','stopsPerDay','startDate'].forEach(id => {
+  document.getElementById(id).addEventListener('input', onSettingsChange);
+  document.getElementById(id).addEventListener('change', onSettingsChange);
+});
+
+// ══════════════════════════════════════════
+// TRIP PLANNING ENGINE
+// ══════════════════════════════════════════
+function generatePlan(silent = false) {
+  if (!state.gpxFiles.length) {
+    if (!silent) showToast('Upload at least one GPX file first');
+    return;
+  }
+
+  const maxKm      = parseFloat(document.getElementById('maxKm').value) || 300;
+  const maxHours   = parseFloat(document.getElementById('maxHours').value) || 6;
+  const avgSpeed   = parseFloat(document.getElementById('avgSpeed').value) || 60;
+  const stopsPerDay= parseInt(document.getElementById('stopsPerDay').value) || 0;
+  const startDate  = document.getElementById('startDate').value;
+
+  const allPoints  = getAllPoints();
+  const maxByTime  = maxHours * avgSpeed;
+  const effectiveMax = Math.min(maxKm, maxByTime);
+
+  const days = [];
+  let cur = { points: [], km: 0 };
+  let dayIndex = 0;
+
+  for (let i = 0; i < allPoints.length; i++) {
+    cur.points.push(allPoints[i]);
+    if (i > 0) {
+      cur.km += haversine(allPoints[i-1], allPoints[i]);
+      if (cur.km >= effectiveMax && i < allPoints.length - 1) {
+        finalizeDay(cur, dayIndex, startDate, avgSpeed, stopsPerDay);
+        days.push(cur);
+        dayIndex++;
+        cur = { points: [allPoints[i]], km: 0 };
+      }
+    }
+  }
+  if (cur.points.length > 1) {
+    finalizeDay(cur, dayIndex, startDate, avgSpeed, stopsPerDay);
+    days.push(cur);
+  }
+
+  const totalKm = totalDistance(allPoints);
+  state.plan = { days, totalKm, pois: [...state.pois] };
+
+  renderPlan();
+  drawRoute(true);
+
+  if (!silent) showToast(`${days.length} days · ${totalKm.toFixed(0)} km total`, 'success');
+  document.getElementById('exportBtn').style.display = '';
+  document.getElementById('statsBar').classList.add('visible');
+}
+
+function finalizeDay(day, idx, startDate, avgSpeed, stopsPerDay) {
+  day.color       = DAY_COLORS[idx % DAY_COLORS.length];
+  day.dayNum      = idx + 1;
+  day.estHours    = (day.km / avgSpeed).toFixed(1);
+  day.stops       = stopsPerDay;
+  day.accommodation = state.accommodation;
+  if (startDate) {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + idx);
+    day.date = d.toISOString().split('T')[0];
+  } else {
+    day.date = null;
+  }
+}
+
+// ══════════════════════════════════════════
+// RENDER LEGEND + STATS
+// ══════════════════════════════════════════
+function renderPlan() {
+  const { days, totalKm, pois } = state.plan;
+  const accomIcons = { wild:'🏕️ Wild', campsite:'⛺ Campsite', hotel:'🏨 Hotel' };
+
+  const leg = document.getElementById('legendItems');
+  leg.innerHTML = '';
+  days.forEach(d => {
+    leg.innerHTML += `
+      <div class="dl-item">
+        <div class="dl-color" style="background:${d.color}"></div>
+        <div>
+          <div class="dl-day">Day ${d.dayNum}${d.date?` <span class="dl-date">${d.date}</span>`:''}</div>
+          <div class="dl-km">${d.km.toFixed(0)} km · ~${d.estHours}h</div>
+        </div>
+      </div>`;
+  });
+  document.getElementById('dayLegend').classList.add('visible');
+
+  document.getElementById('statTotal').textContent   = totalKm.toFixed(0);
+  document.getElementById('statDays').textContent    = days.length;
+  document.getElementById('statAvgDay').textContent  = (totalKm / days.length).toFixed(0);
+  document.getElementById('statPOIs').textContent    = pois.length;
+  document.getElementById('statAccom').textContent   = accomIcons[state.accommodation] || state.accommodation;
+
+  const eff = Math.min(
+    parseFloat(document.getElementById('maxKm').value)||300,
+    (parseFloat(document.getElementById('maxHours').value)||6)*(parseFloat(document.getElementById('avgSpeed').value)||60)
+  );
+  document.getElementById('previewHint').textContent =
+    `${days.length} days · ${totalKm.toFixed(0)} km · max ${eff.toFixed(0)} km/day`;
+}
+
+// ══════════════════════════════════════════
+// CANVAS DRAWING
+// ══════════════════════════════════════════
+function drawEmpty() {
+  const canvas = document.getElementById('map-canvas');
+  canvas.width  = canvas.parentElement.clientWidth;
+  canvas.height = canvas.parentElement.clientHeight;
+  document.getElementById('mapPlaceholder').style.display = 'flex';
+  document.getElementById('dayLegend').classList.remove('visible');
+  document.getElementById('statsBar').classList.remove('visible');
+  document.getElementById('exportBtn').style.display = 'none';
+  document.getElementById('previewHint').textContent = 'Upload a GPX to get started';
+}
+
+function drawRoute(withPlan) {
+  const canvas = document.getElementById('map-canvas');
+  const container = canvas.parentElement;
+  canvas.width  = container.clientWidth;
+  canvas.height = container.clientHeight;
+  const ctx = canvas.getContext('2d');
+  const allPoints = getAllPoints();
+  if (!allPoints.length) { drawEmpty(); return; }
+  document.getElementById('mapPlaceholder').style.display = 'none';
+
+  // Bounds
+  let minLat=Infinity,maxLat=-Infinity,minLon=Infinity,maxLon=-Infinity;
+  [...allPoints,...state.pois].forEach(p=>{
+    minLat=Math.min(minLat,p.lat); maxLat=Math.max(maxLat,p.lat);
+    minLon=Math.min(minLon,p.lon); maxLon=Math.max(maxLon,p.lon);
+  });
+  const pad=64;
+  const scale = Math.min(
+    (canvas.width-pad*2)/((maxLon-minLon)||0.001),
+    (canvas.height-pad*2)/((maxLat-minLat)||0.001)
+  );
+  const offX = (canvas.width-pad*2-(maxLon-minLon)*scale)/2;
+  const offY = (canvas.height-pad*2-(maxLat-minLat)*scale)/2;
+  const toX = lon => pad+(lon-minLon)*scale+offX;
+  const toY = lat => canvas.height-pad-(lat-minLat)*scale-offY;
+
+  // BG
+  const bg = ctx.createRadialGradient(canvas.width/2,canvas.height/2,0,canvas.width/2,canvas.height/2,Math.max(canvas.width,canvas.height)/1.5);
+  bg.addColorStop(0,'#141618'); bg.addColorStop(1,'#0a0b0c');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='rgba(255,255,255,0.022)'; ctx.lineWidth=1;
+  for(let x=0;x<canvas.width;x+=48){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke();}
+  for(let y=0;y<canvas.height;y+=48){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke();}
+
+  const drawPath = (pts, color, lw, glow) => {
+    ctx.beginPath();
+    pts.forEach((p,i)=>i===0?ctx.moveTo(toX(p.lon),toY(p.lat)):ctx.lineTo(toX(p.lon),toY(p.lat)));
+    ctx.shadowColor=color; ctx.shadowBlur=glow;
+    ctx.strokeStyle=color; ctx.lineWidth=lw;
+    ctx.lineCap='round'; ctx.lineJoin='round';
+    ctx.stroke(); ctx.shadowBlur=0;
+  };
+
+  if (withPlan && state.plan?.days.length) {
+    state.plan.days.forEach(day => {
+      drawPath(day.points, day.color+'44', 10, 20);
+      drawPath(day.points, day.color, 3, 0);
+      // Overnight dot
+      const l = day.points[day.points.length-1];
+      const mx=toX(l.lon), my=toY(l.lat);
+      ctx.shadowColor=day.color; ctx.shadowBlur=12;
+      ctx.fillStyle=day.color; ctx.beginPath(); ctx.arc(mx,my,6,0,Math.PI*2); ctx.fill();
+      ctx.shadowBlur=0;
+      ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(mx,my,2.5,0,Math.PI*2); ctx.fill();
+      const emoji={wild:'🏕',campsite:'⛺',hotel:'🏨'}[day.accommodation]||'📍';
+      ctx.font='13px sans-serif'; ctx.fillText(emoji,mx+8,my-6);
+      ctx.font='bold 9px Barlow,sans-serif'; ctx.fillStyle=day.color;
+      ctx.fillText(`D${day.dayNum}`,mx+8,my+6);
+    });
+  } else {
+    drawPath(allPoints,'#e8500a44',8,14);
+    drawPath(allPoints,'#e8500a',2.5,0);
+  }
+
+  // Start
+  const s=allPoints[0];
+  ctx.shadowColor='#4caf6e'; ctx.shadowBlur=16;
+  ctx.fillStyle='#4caf6e'; ctx.beginPath(); ctx.arc(toX(s.lon),toY(s.lat),8,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0; ctx.fillStyle='#fff'; ctx.font='bold 9px sans-serif';
+  ctx.textAlign='center'; ctx.fillText('S',toX(s.lon),toY(s.lat)+3); ctx.textAlign='left';
+
+  // End
+  const e=allPoints[allPoints.length-1];
+  ctx.shadowColor='#f44336'; ctx.shadowBlur=16;
+  ctx.fillStyle='#f44336'; ctx.beginPath(); ctx.arc(toX(e.lon),toY(e.lat),8,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0; ctx.fillStyle='#fff'; ctx.font='bold 9px sans-serif';
+  ctx.textAlign='center'; ctx.fillText('E',toX(e.lon),toY(e.lat)+3); ctx.textAlign='left';
+
+  // POIs
+  state.pois.forEach(poi=>{
+    const x=toX(poi.lon),y=toY(poi.lat);
+    ctx.shadowColor='#f5a623'; ctx.shadowBlur=10;
+    ctx.fillStyle='#f5a623'; ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.fill();
+    ctx.shadowBlur=0; ctx.fillStyle='#fff'; ctx.font='10px Barlow,sans-serif';
+    ctx.fillText(poi.name,x+8,y+4);
+  });
+}
+
+// ══════════════════════════════════════════
+// GPX EXPORT — one file per day
+// ══════════════════════════════════════════
+const accomNames = { wild:'Wild Camping', campsite:'Campsite', hotel:'Hotel' };
+
+function buildDayGPX(day, pois) {
+  // Build filename: date_day-N.gpx  or  day-N.gpx if no date
+  const datePrefix = day.date ? day.date : null;
+  const filename = datePrefix
+    ? `${datePrefix}_day-${day.dayNum}.gpx`
+    : `day-${day.dayNum}.gpx`;
+
+  // Overnight waypoint (end of this day's segment)
+  const last = day.points[day.points.length - 1];
+  const sym  = day.accommodation === 'hotel' ? 'Lodging' : 'Campground';
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="MotoRoute Planner"
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xmlns:moto="http://motoroute.app/gpx/1.0">
+  <metadata>
+    <name>Day ${day.dayNum}${day.date ? ' — ' + day.date : ''}</name>
+    <desc>${day.km.toFixed(0)} km · ~${day.estHours}h · ${accomNames[day.accommodation]}</desc>
+  </metadata>
+  <trk>
+    <name>Day ${day.dayNum}${day.date ? ' — ' + day.date : ''}</name>
+    <extensions>
+      <moto:color>${day.color}</moto:color>
+      <moto:day>${day.dayNum}</moto:day>
+      <moto:accommodation>${day.accommodation}</moto:accommodation>
+      <moto:distanceKm>${day.km.toFixed(2)}</moto:distanceKm>
+      <moto:estimatedHours>${day.estHours}</moto:estimatedHours>
+    </extensions>
+    <trkseg>\n`;
+
+  day.points.forEach(p => {
+    xml += `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}">`;
+    if (p.ele) xml += `\n        <ele>${p.ele.toFixed(1)}</ele>`;
+    if (p.time) xml += `\n        <time>${p.time}</time>`;
+    xml += `\n      </trkpt>\n`;
+  });
+
+  xml += `    </trkseg>
+  </trk>
+  <!-- Overnight stop -->
+  <wpt lat="${last.lat.toFixed(7)}" lon="${last.lon.toFixed(7)}">
+    <name>Night ${day.dayNum}${day.date ? ' (' + day.date + ')' : ''}</name>
+    <sym>${sym}</sym>
+    <type>${accomNames[day.accommodation]}</type>
+  </wpt>\n`;
+
+  // Include any POIs (in all day files, so they're always visible)
+  pois.forEach(poi => {
+    xml += `  <wpt lat="${poi.lat.toFixed(7)}" lon="${poi.lon.toFixed(7)}">
+    <name>${poi.name}</name>
+    <sym>Pin</sym>
+    <type>POI</type>
+  </wpt>\n`;
+  });
+
+  xml += `</gpx>`;
+  return { filename, xml };
+}
+
+function downloadFile(filename, content, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function exportAllDays() {
+  if (!state.plan) { showToast('Generate a plan first'); return; }
+  const { days, pois } = state.plan;
+
+  if (days.length === 1) {
+    // Single day — just download immediately
+    const { filename, xml } = buildDayGPX(days[0], pois);
+    downloadFile(filename, xml, 'application/gpx+xml');
+    showToast(`Exported ${filename}`, 'success');
+    return;
+  }
+
+  // Multiple days — stagger downloads slightly so browser doesn't block them
+  showToast(`Downloading ${days.length} GPX files…`);
+  for (let i = 0; i < days.length; i++) {
+    await new Promise(res => setTimeout(res, i * 300));
+    const { filename, xml } = buildDayGPX(days[i], pois);
+    downloadFile(filename, xml, 'application/gpx+xml');
+  }
+  setTimeout(() => showToast(`${days.length} GPX files exported ✓`, 'success'), days.length * 300 + 200);
+}
+
+// ══════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (type?' '+type:'');
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+window.addEventListener('resize', () => {
+  if (state.gpxFiles.length) drawRoute(!!state.plan);
+});
+</script>
+</body>
+</html>
