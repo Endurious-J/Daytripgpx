@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MotoRoute Planner</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script><\/script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;600;700;900&family=Barlow:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d0e0f; --surface: #141618; --surface2: #1c1f22;
+    --border: #2a2d31; --accent: #e8500a; --accent2: #f5a623;
+    --text: #e8e6e1; --muted: #6a6865; --success: #4caf6e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: "Barlow", sans-serif; font-weight: 300;
+    height: 100vh; max-height: 100vh; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+
+  /* HEADER */
+  header {
+    display: flex; align-items: center; gap: 1.2rem;
+    padding: 0.9rem 1.5rem; border-bottom: 1px solid var(--border);
+    flex-shrink: 0; background: var(--surface);
+  }
+  .logo-mark {
+    width: 36px; height: 36px; background: var(--accent);
+    clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .logo-mark svg { width: 18px; height: 18px; fill: white; }
+  h1 { font-family: "Barlow Condensed", sans-serif; font-weight: 900; font-size: 1.6rem; letter-spacing: 0.05em; text-transform: uppercase; }
+  h1 span { color: var(--accent); }
+  .tagline { font-size: 0.68rem; color: var(--muted); letter-spacing: 0.14em; text-transform: uppercase; margin-top: 0.1rem; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
+  .live-badge { display: none; align-items: center; gap: 0.4rem; font-size: 0.68rem; color: var(--success); letter-spacing: 0.08em; text-transform: uppercase; font-family: "Barlow Condensed", sans-serif; font-weight: 600; }
+  .live-badge.visible { display: flex; }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+
+  /* MAIN WRAPPER: sidebar + right column */
+  .main-layout {
+    display: flex; flex: 1; overflow: hidden; min-height: 0;
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 360px; flex-shrink: 0; display: flex; flex-direction: column;
+    border-right: 1px solid var(--border); background: var(--surface); min-height: 0;
+  }
+  .sidebar-scroll {
+    flex: 1; overflow-y: scroll; min-height: 0;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar { width: 4px; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .sidebar-footer {
+    padding: 0.85rem 1.2rem; border-top: 1px solid var(--border);
+    background: var(--bg); flex-shrink: 0; display: flex; gap: 0.55rem;
+  }
+
+  /* RIGHT COLUMN: map + elev panel stacked */
+  .right-col {
+    flex: 1; display: flex; flex-direction: column; overflow: hidden; min-height: 0; min-width: 0;
+  }
+
+  /* PANELS */
+  .panel { border-bottom: 1px solid var(--border); }
+  .panel-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 1.2rem; background: var(--bg); }
+  .panel-num { font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 0.65rem; color: var(--accent); background: rgba(232,80,10,0.15); border: 1px solid rgba(232,80,10,0.3); width: 20px; height: 20px; border-radius: 3px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .panel-title { font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; }
+  .panel-body { padding: 0.85rem 1.2rem; }
+
+  /* UPLOAD */
+  .upload-zone { border: 2px dashed var(--border); border-radius: 6px; padding: 1.1rem; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; }
+  .upload-zone:hover, .upload-zone.drag-over { border-color: var(--accent); background: rgba(232,80,10,0.04); }
+  .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-icon { font-size: 1.4rem; opacity: 0.3; margin-bottom: 0.25rem; }
+  .upload-text { font-size: 0.74rem; color: var(--muted); line-height: 1.5; }
+  .upload-text strong { color: var(--text); display: block; font-weight: 500; }
+  .file-list { margin-top: 0.55rem; display: flex; flex-direction: column; gap: 0.3rem; }
+  .file-item { display: flex; align-items: center; gap: 0.5rem; background: var(--surface2); border-radius: 4px; padding: 0.42rem 0.65rem; font-size: 0.74rem; }
+  .fi-icon { color: var(--accent); }
+  .fi-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fi-pts { color: var(--muted); font-size: 0.66rem; white-space: nowrap; }
+  .fi-del { cursor: pointer; color: var(--muted); background: none; border: none; font-size: 0.9rem; padding: 0; transition: color 0.15s; }
+  .fi-del:hover { color: #ff5555; }
+
+  /* FORM */
+  .field-label { display: block; font-size: 0.66rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.28rem; }
+  .field-group { margin-bottom: 0.65rem; }
+  .field-group:last-child { margin-bottom: 0; }
+  .input-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+  input[type="number"], input[type="text"], input[type="date"] {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px;
+    color: var(--text); font-family: "Barlow", sans-serif; font-size: 0.84rem;
+    padding: 0.46rem 0.7rem; outline: none; transition: border-color 0.15s; appearance: none;
+  }
+  input[type="number"]:focus, input[type="text"]:focus, input[type="date"]:focus { border-color: var(--accent); }
+  input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.5); cursor: pointer; }
+  .number-with-unit { display: flex; align-items: stretch; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; transition: border-color 0.15s; }
+  .number-with-unit:focus-within { border-color: var(--accent); }
+  .number-with-unit input { flex: 1; border: none; background: transparent; padding: 0.46rem 0.6rem; border-radius: 0; min-width: 0; }
+  .number-with-unit input:focus { outline: none; }
+  .nwu-unit { padding: 0 0.55rem; font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; border-left: 1px solid var(--border); display: flex; align-items: center; background: rgba(0,0,0,0.15); }
+
+  /* ACCOMMODATION */
+  .accom-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.45rem; }
+  .accom-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.3rem; text-align: center; cursor: pointer; transition: all 0.18s; display: flex; flex-direction: column; align-items: center; gap: 0.22rem; }
+  .accom-btn:hover { border-color: rgba(232,80,10,0.5); }
+  .accom-btn.active { border-color: var(--accent); background: rgba(232,80,10,0.1); box-shadow: 0 0 0 1px rgba(232,80,10,0.2); }
+  .ab-icon { font-size: 1.15rem; }
+  .ab-label { font-size: 0.6rem; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+  .accom-btn.active .ab-label { color: var(--accent); }
+
+  /* SUGGEST */
+  .suggest-btn { width: 100%; margin-top: 0.55rem; background: var(--surface2); border: 1px dashed var(--border); border-radius: 6px; padding: 0.55rem 0.8rem; display: flex; align-items: center; gap: 0.55rem; cursor: pointer; transition: all 0.18s; text-align: left; }
+  .suggest-btn:hover { border-color: var(--accent2); background: rgba(245,166,35,0.05); }
+  .suggest-btn.active { border-color: var(--accent2); border-style: solid; background: rgba(245,166,35,0.08); }
+  .suggest-btn .sb-icon { font-size: 1.1rem; flex-shrink: 0; }
+  .suggest-btn .sb-text { flex: 1; }
+  .suggest-btn .sb-title { font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+  .suggest-btn .sb-sub { font-size: 0.65rem; color: var(--muted); margin-top: 0.1rem; }
+  .suggest-btn.active .sb-title { color: var(--accent2); }
+  .suggest-results { margin-top: 0.6rem; display: none; flex-direction: column; }
+  .suggest-results.visible { display: flex; }
+  .suggest-results-title { font-size: 0.63rem; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.35rem; }
+  .day-suggestion { background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: 5px; padding: 0.5rem 0.7rem; margin-bottom: 0.4rem; }
+  .day-suggestion-head { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.35rem; }
+  .day-suggestion-color { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .day-suggestion-label { font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; flex: 1; }
+  .day-suggestion-dist { font-size: 0.63rem; color: var(--muted); }
+  .suggestion-opt { display: flex; align-items: center; gap: 0.5rem; padding: 0.3rem 0.45rem; border-radius: 4px; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; font-size: 0.72rem; }
+  .suggestion-opt:hover { background: rgba(255,255,255,0.04); border-color: var(--border); }
+  .suggestion-opt.selected { border-color: var(--accent2); background: rgba(245,166,35,0.08); }
+  .suggestion-opt .so-icon { font-size: 0.9rem; flex-shrink: 0; width: 16px; text-align: center; }
+  .suggestion-opt .so-name { flex: 1; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .suggestion-opt .so-dist { font-size: 0.62rem; color: var(--muted); white-space: nowrap; }
+  .no-suggestions { font-size: 0.72rem; color: var(--muted); font-style: italic; padding: 0.3rem 0; }
+  .source-badge { display: inline-block; font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; font-family: "Barlow Condensed", sans-serif; font-weight: 700; padding: 0.18rem 0.45rem; border-radius: 3px; margin-bottom: 0.35rem; }
+  .source-badge.gpx { background: rgba(232,80,10,0.15); color: var(--accent); border: 1px solid rgba(232,80,10,0.3); }
+  .source-badge.osm { background: rgba(76,175,110,0.15); color: var(--success); border: 1px solid rgba(76,175,110,0.3); }
+
+  /* POI */
+  .poi-list { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.55rem; }
+  .poi-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 0.45rem 0.65rem; display: flex; gap: 0.5rem; align-items: center; }
+  .poi-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent2); flex-shrink: 0; }
+  .poi-info { flex: 1; min-width: 0; }
+  .poi-name { font-size: 0.77rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .poi-coords { font-size: 0.63rem; color: var(--muted); font-family: monospace; }
+  .poi-del { cursor: pointer; color: var(--muted); background: none; border: none; font-size: 0.85rem; padding: 0; transition: color 0.15s; }
+  .poi-del:hover { color: #ff5555; }
+  .poi-add { display: flex; flex-direction: column; gap: 0.38rem; }
+  .poi-coord-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.38rem; }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; border: none; border-radius: 5px; cursor: pointer; font-family: "Barlow Condensed", sans-serif; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; transition: all 0.18s; white-space: nowrap; }
+  .btn-sm { padding: 0.38rem 0.7rem; font-size: 0.73rem; }
+  .btn-md { padding: 0.55rem 1rem; font-size: 0.82rem; }
+  .btn-full { width: 100%; }
+  .btn-ghost { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--text); }
+  .btn-accent { background: var(--accent); color: white; }
+  .btn-accent:hover { background: #c43d00; }
+  .btn-success { background: var(--success); color: white; }
+  .btn-success:hover { background: #3d9658; }
+
+  /* PREVIEW TOOLBAR */
+  .preview-toolbar { display: flex; align-items: center; gap: 1rem; padding: 0.58rem 1.2rem; border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface); }
+  .preview-toolbar-title { font-family: "Barlow Condensed", sans-serif; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); flex: 1; }
+
+  /* MAP */
+  .map-container { flex: 1; position: relative; overflow: hidden; min-height: 0; }
+  #map-canvas { width: 100%; height: 100%; }
+  .map-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem; color: var(--muted); pointer-events: none; z-index: 500; }
+  .map-placeholder-icon { font-size: 3.5rem; opacity: 0.1; }
+  .map-placeholder-text { font-family: "Barlow Condensed", sans-serif; font-size: 0.9rem; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.25; }
+  .map-placeholder-sub { font-size: 0.7rem; opacity: 0.18; }
+
+  /* DAY LEGEND */
+  .day-legend { position: absolute; top: 1rem; right: 1rem; background: rgba(13,14,15,0.93); border: 1px solid var(--border); border-radius: 6px; padding: 0.65rem 0.85rem; min-width: 165px; display: none; backdrop-filter: blur(10px); max-height: calc(100% - 2rem); overflow-y: auto; z-index: 500; }
+  .day-legend.visible { display: block; }
+  .dl-title { font-family: "Barlow Condensed", sans-serif; font-size: 0.63rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.45rem; }
+  .dl-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.2rem 0; font-size: 0.73rem; }
+  .dl-color { width: 16px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+  .dl-day { font-weight: 500; }
+  .dl-km { font-size: 0.63rem; color: var(--muted); }
+  .dl-date { font-size: 0.6rem; color: var(--muted); opacity: 0.7; }
+
+  /* STATS BAR */
+  .stats-bar { display: none; border-top: 1px solid var(--border); padding: 0.58rem 1.5rem; gap: 1.8rem; flex-wrap: wrap; flex-shrink: 0; background: var(--surface); }
+  .stats-bar.visible { display: flex; }
+  .stat { display: flex; flex-direction: column; gap: 0.03rem; }
+  .stat-val { font-family: "Barlow Condensed", sans-serif; font-size: 1.25rem; font-weight: 700; color: var(--accent); }
+  .stat-label { font-size: 0.61rem; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; }
+
+  /* ELEVATION PANEL */
+  .elev-panel { display: none; flex-direction: column; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; height: 175px; min-height: 175px; }
+  .elev-panel.visible { display: flex; }
+  .elev-toolbar { display: flex; align-items: center; gap: 0.75rem; padding: 0.42rem 1rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .elev-toolbar-left { display: flex; align-items: baseline; gap: 0.6rem; flex: 1; min-width: 0; overflow: hidden; }
+  .elev-title { font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; white-space: nowrap; }
+  .elev-hint { font-size: 0.67rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .elev-day-tabs { display: flex; gap: 0.28rem; flex-wrap: wrap; }
+  .elev-tab { padding: 0.18rem 0.5rem; border-radius: 3px; border: 1px solid var(--border); font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 0.67rem; letter-spacing: 0.07em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; color: var(--muted); background: var(--surface2); }
+  .elev-tab:hover { color: var(--text); }
+  .elev-tab.active { color: #fff; border-color: transparent; }
+  .elev-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.85rem; padding: 0.2rem 0.4rem; border-radius: 3px; transition: color 0.15s; flex-shrink: 0; }
+  .elev-close:hover { color: var(--text); }
+  .elev-chart-wrap { flex: 1; position: relative; overflow: hidden; display: flex; align-items: stretch; min-height: 0; }
+  #elevCanvas { flex: 1; display: block; min-width: 0; cursor: crosshair; }
+  .elev-stats { display: flex; flex-direction: column; justify-content: center; gap: 0.45rem; padding: 0.5rem 0.9rem; border-left: 1px solid var(--border); flex-shrink: 0; width: 105px; }
+  .elev-stat { display: flex; flex-direction: column; gap: 0.03rem; }
+  .elev-stat-val { font-family: "Barlow Condensed", sans-serif; font-size: 1rem; font-weight: 700; color: var(--accent); }
+  .elev-stat-label { font-size: 0.58rem; color: var(--muted); letter-spacing: 0.07em; text-transform: uppercase; }
+  .elev-tooltip { position: absolute; pointer-events: none; display: none; background: rgba(13,14,15,0.92); border: 1px solid var(--border); border-radius: 4px; padding: 0.28rem 0.55rem; font-size: 0.72rem; white-space: nowrap; z-index: 10; }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--surface2); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: 0.65rem 1rem; font-size: 0.78rem; z-index: 9999; transform: translateX(120%); transition: transform 0.3s cubic-bezier(0.16,1,0.3,1); max-width: 270px; line-height: 1.4; }
+  .toast.show { transform: translateX(0); }
+  .toast.success { border-left-color: var(--success); }
+
+  /* Leaflet dark popup */
+  .leaflet-popup-content-wrapper { background: rgba(20,22,24,0.96); color: var(--text); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+  .leaflet-popup-tip { background: rgba(20,22,24,0.96); }
+  .leaflet-popup-content { font-family: "Barlow", sans-serif; font-size: 0.8rem; line-height: 1.5; margin: 0.5rem 0.75rem; }
+  .leaflet-tooltip { background: rgba(13,14,15,0.9); border: 1px solid var(--border); color: var(--text); font-family: "Barlow", sans-serif; font-size: 0.72rem; }
+
+  @media (max-width: 760px) {
+    .main-layout { flex-direction: column; }
+    .sidebar { width: 100%; height: auto; max-height: 50vh; }
+    .map-container { min-height: 280px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-mark">
+    <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.87-3.13-7-7-7zm2.85 11.1l-.85.6V16h-4v-2.3l-.85-.6C7.8 12.16 7 10.63 7 9c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.63-.8 3.16-2.15 4.1z"/></svg>
+  </div>
+  <div>
+    <h1>Moto<span>Route</span></h1>
+    <div class="tagline">Motorcycle Trip Planner</div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge" id="liveBadge"><div class="live-dot"></div>Live preview</div>
+  </div>
+</header>
+
+<div class="main-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-scroll">
+
+      <div class="panel">
+        <div class="panel-head"><div class="panel-num">1</div><div class="panel-title">GPX Files</div></div>
+        <div class="panel-body">
+          <div class="upload-zone" id="uploadZone">
+            <input type="file" id="gpxInput" accept=".gpx" multiple>
+            <div class="upload-icon">&#128506;</div>
+            <div class="upload-text"><strong>Drop GPX files here</strong>or click to browse</div>
+          </div>
+          <div class="file-list" id="fileList"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><div class="panel-num">2</div><div class="panel-title">Daily Riding</div></div>
+        <div class="panel-body">
+          <div class="input-grid-2" style="margin-bottom:0.65rem">
+            <div class="field-group">
+              <label class="field-label">Max km / day</label>
+              <div class="number-with-unit"><input type="number" id="maxKm" value="300" min="50" max="800" step="10"><span class="nwu-unit">km</span></div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Max hours / day</label>
+              <div class="number-with-unit"><input type="number" id="maxHours" value="6" min="1" max="16" step="0.5"><span class="nwu-unit">h</span></div>
+            </div>
+          </div>
+          <div class="input-grid-2" style="margin-bottom:0.65rem">
+            <div class="field-group">
+              <label class="field-label">Avg speed</label>
+              <div class="number-with-unit"><input type="number" id="avgSpeed" value="60" min="20" max="120" step="5"><span class="nwu-unit">km/h</span></div>
+            </div>
+            <div class="field-group">
+              <label class="field-label">Stops / day</label>
+              <div class="number-with-unit"><input type="number" id="stopsPerDay" value="3" min="0" max="10"><span class="nwu-unit">stops</span></div>
+            </div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Start date (optional)</label>
+            <input type="date" id="startDate">
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><div class="panel-num">3</div><div class="panel-title">Accommodation</div></div>
+        <div class="panel-body">
+          <div class="accom-grid">
+            <div class="accom-btn" data-accom="wild" onclick="setAccom(this)"><div class="ab-icon">&#127957;&#65039;</div><div class="ab-label">Wild camp</div></div>
+            <div class="accom-btn active" data-accom="campsite" onclick="setAccom(this)"><div class="ab-icon">&#9978;</div><div class="ab-label">Campsite</div></div>
+            <div class="accom-btn" data-accom="hotel" onclick="setAccom(this)"><div class="ab-icon">&#127976;</div><div class="ab-label">Hotel</div></div>
+          </div>
+          <button class="suggest-btn" id="suggestBtn" onclick="toggleSuggest()">
+            <span class="sb-icon">&#10024;</span>
+            <span class="sb-text">
+              <div class="sb-title">Suggest from GPX</div>
+              <div class="sb-sub">Match overnight stops to waypoints in your GPX files</div>
+            </span>
+          </button>
+          <div class="suggest-results" id="suggestResults">
+            <div class="suggest-results-title">Overnight suggestions per day</div>
+            <div id="suggestResultsBody"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><div class="panel-num">4</div><div class="panel-title">Points of Interest</div></div>
+        <div class="panel-body">
+          <div class="poi-list" id="poiList"></div>
+          <div class="poi-add">
+            <input type="text" id="poiName" placeholder="Name (e.g. Viewpoint, Fuel stop)">
+            <div class="poi-coord-row">
+              <input type="number" id="poiLat" placeholder="Latitude" step="0.000001">
+              <input type="number" id="poiLon" placeholder="Longitude" step="0.000001">
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="addPOI()">+ Add POI</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div class="sidebar-footer">
+      <button class="btn btn-accent btn-md" style="flex:1" onclick="generatePlan()">&#9889; Generate Plan</button>
+      <button class="btn btn-success btn-md" id="exportBtn" onclick="exportAllDays()" style="display:none">&#8595; Export GPX</button>
+    </div>
+  </aside>
+
+  <!-- RIGHT COLUMN -->
+  <div class="right-col">
+    <div class="preview-toolbar">
+      <span class="preview-toolbar-title">Route Preview</span>
+      <span id="previewHint" style="font-size:0.7rem;color:var(--muted)">Upload a GPX to get started</span>
+    </div>
+    <div class="map-container">
+      <div id="map-canvas"></div>
+      <div class="map-placeholder" id="mapPlaceholder">
+        <div class="map-placeholder-icon">&#128689;</div>
+        <div class="map-placeholder-text">No route loaded</div>
+        <div class="map-placeholder-sub">Upload a GPX file to begin planning</div>
+      </div>
+      <div class="day-legend" id="dayLegend">
+        <div class="dl-title">Day Segments</div>
+        <div id="legendItems"></div>
+      </div>
+    </div>
+    <div class="stats-bar" id="statsBar">
+      <div class="stat"><div class="stat-val" id="statTotal">-</div><div class="stat-label">Total km</div></div>
+      <div class="stat"><div class="stat-val" id="statDays">-</div><div class="stat-label">Days</div></div>
+      <div class="stat"><div class="stat-val" id="statAvgDay">-</div><div class="stat-label">Avg km/day</div></div>
+      <div class="stat"><div class="stat-val" id="statPOIs">-</div><div class="stat-label">POIs</div></div>
+      <div class="stat"><div class="stat-val" id="statAccom">-</div><div class="stat-label">Sleep</div></div>
+    </div>
+    <div class="elev-panel" id="elevPanel">
+      <div class="elev-toolbar">
+        <div class="elev-toolbar-left">
+          <span class="elev-title" id="elevTitle">Elevation Profile</span>
+          <span class="elev-hint" id="elevHint">Click a day segment on the map</span>
+        </div>
+        <div class="elev-day-tabs" id="elevDayTabs"></div>
+        <button class="elev-close" onclick="closeElevPanel()">&#10005;</button>
+      </div>
+      <div class="elev-chart-wrap">
+        <canvas id="elevCanvas"></canvas>
+        <div class="elev-stats" id="elevStats"></div>
+        <div class="elev-tooltip" id="elevTooltip"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+const state = {
+  gpxFiles: [],
+  gpxWaypoints: [],   // wpt elements from all loaded GPX files
+  pois: [],
+  accommodation: 'campsite',
+  plan: null,
+  liveEnabled: false,
+  suggestActive: false,
+  dayOverrides: {},   // dayNum -> chosen waypoint
+  overpassCache: {},  // 'lat,lon,accom' -> results
+};
+
+const var_accent2 = '#f5a623';
+
+const DAY_COLORS = [
+  '#e8500a','#f5a623','#4caf6e','#2196f3','#9c27b0',
+  '#f44336','#00bcd4','#ff5722','#8bc34a','#3f51b5',
+  '#e91e63','#ff9800','#009688','#673ab7','#cddc39',
+];
+
+// ══════════════════════════════════════════
+// GPX PARSING
+// ══════════════════════════════════════════
+function parseGPX(text) {
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  // Track points (route geometry)
+  const trackEls = doc.querySelectorAll('trkpt, rtept');
+  const points = [];
+  trackEls.forEach(pt => {
+    const lat = parseFloat(pt.getAttribute('lat'));
+    const lon = parseFloat(pt.getAttribute('lon'));
+    if (!isNaN(lat) && !isNaN(lon)) {
+      points.push({
+        lat, lon,
+        ele: parseFloat(pt.querySelector('ele')?.textContent || 0) || 0,
+        time: pt.querySelector('time')?.textContent || null,
+      });
+    }
+  });
+  // Waypoints (POIs, campsites, etc embedded in GPX)
+  const wptEls = doc.querySelectorAll('wpt');
+  const waypoints = [];
+  wptEls.forEach(wpt => {
+    const lat = parseFloat(wpt.getAttribute('lat'));
+    const lon = parseFloat(wpt.getAttribute('lon'));
+    if (isNaN(lat) || isNaN(lon)) return;
+    const name = wpt.querySelector('name')?.textContent?.trim() || 'Waypoint';
+    const sym  = wpt.querySelector('sym')?.textContent?.trim()  || '';
+    const type = wpt.querySelector('type')?.textContent?.trim() || '';
+    const desc = wpt.querySelector('desc')?.textContent?.trim() || '';
+    waypoints.push({ lat, lon, name, sym, type, desc });
+  });
+  return { points, waypoints };
+}
+
+// Classify a waypoint into an accommodation type based on name/sym/type
+function classifyWaypoint(wpt) {
+  const hay = [wpt.name, wpt.sym, wpt.type, wpt.desc].join(' ').toLowerCase();
+  if (/hotel|hostel|motel|b&b|bed.and.bread|lodge|inn|pension|guesthouse/.test(hay)) return 'hotel';
+  if (/camp|kampeer|kamp|pitch|zelt|bivouac|bivi/.test(hay)) return 'campsite';
+  if (/wild|bivvy|free.camp/.test(hay)) return 'wild';
+  return 'unknown';
+}
+
+function wptIcon(type) {
+  if (type === 'hotel')    return '🏨';
+  if (type === 'campsite') return '⛺';
+  if (type === 'wild')     return '🏕️';
+  return '📍';
+}
+
+function haversine(a, b) {
+  const R = 6371, dLat=(b.lat-a.lat)*Math.PI/180, dLon=(b.lon-a.lon)*Math.PI/180;
+  const x = Math.sin(dLat/2)**2 + Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+function totalDistance(pts) {
+  let d = 0;
+  for (let i = 1; i < pts.length; i++) d += haversine(pts[i-1], pts[i]);
+  return d;
+}
+
+function getAllPoints() { return state.gpxFiles.flatMap(f => f.points); }
+
+// ══════════════════════════════════════════
+// FILE HANDLING
+// ══════════════════════════════════════════
+const gpxInput = document.getElementById('gpxInput');
+const uploadZone = document.getElementById('uploadZone');
+
+gpxInput.addEventListener('change', e => handleFiles(e.target.files));
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault(); uploadZone.classList.remove('drag-over');
+  handleFiles(e.dataTransfer.files);
+});
+
+function handleFiles(files) {
+  Array.from(files).forEach(file => {
+    if (!file.name.toLowerCase().endsWith('.gpx')) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const { points, waypoints } = parseGPX(e.target.result);
+      if (!points.length) { showToast('No track points found in ' + file.name); return; }
+      state.gpxFiles = state.gpxFiles.filter(f => f.name !== file.name);
+      state.gpxFiles.push({ name: file.name, points });
+      // Merge waypoints, deduplicate by name+coords
+      waypoints.forEach(wpt => {
+        const exists = state.gpxWaypoints.some(w => w.name === wpt.name && Math.abs(w.lat - wpt.lat) < 0.0001);
+        if (!exists) state.gpxWaypoints.push({ ...wpt, category: classifyWaypoint(wpt) });
+      });
+      renderFileList();
+      onSettingsChange();
+      const wMsg = waypoints.length ? ` · ${waypoints.length} waypoints` : '';
+      showToast(`${file.name}: ${points.length} pts · ${totalDistance(points).toFixed(0)} km${wMsg}`, 'success');
+    };
+    reader.readAsText(file);
+  });
+}
+
+function removeFile(name) {
+  state.gpxFiles = state.gpxFiles.filter(f => f.name !== name);
+  // Rebuild waypoints from remaining files (re-parse would need original text; just clear all if none left)
+  if (!state.gpxFiles.length) state.gpxWaypoints = [];
+  state.plan = null;
+  state.dayOverrides = {};
+  renderFileList();
+  onSettingsChange();
+  if (state.suggestActive) renderSuggestions();
+  autoShowElevation();
+}
+
+function renderFileList() {
+  const el = document.getElementById('fileList');
+  el.innerHTML = '';
+  state.gpxFiles.forEach(f => {
+    const dist = totalDistance(f.points);
+    const safeName = f.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    el.innerHTML += `
+      <div class="file-item">
+        <span class="fi-icon">📄</span>
+        <span class="fi-name" title="${f.name}">${f.name}</span>
+        <span class="fi-pts">${f.points.length}pts·${dist.toFixed(0)}km</span>
+        <button class="fi-del" onclick="removeFile('${safeName}')">✕</button>
+      </div>`;
+  });
+}
+
+// ══════════════════════════════════════════
+// ACCOMMODATION
+// ══════════════════════════════════════════
+function setAccom(el) {
+  document.querySelectorAll('.accom-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  state.accommodation = el.dataset.accom;
+  onSettingsChange();
+  // Re-run suggestions with new accom type (clears Overpass cache for fresh search)
+  if (state.suggestActive) {
+    state.overpassCache = {};
+    renderSuggestions();
+  }
+}
+
+// ══════════════════════════════════════════
+// POIs
+// ══════════════════════════════════════════
+function addPOI() {
+  const name = document.getElementById('poiName').value.trim() || 'POI';
+  const lat = parseFloat(document.getElementById('poiLat').value);
+  const lon = parseFloat(document.getElementById('poiLon').value);
+  if (isNaN(lat) || isNaN(lon)) { showToast('Enter valid coordinates'); return; }
+  state.pois.push({ name, lat, lon });
+  document.getElementById('poiName').value = '';
+  document.getElementById('poiLat').value = '';
+  document.getElementById('poiLon').value = '';
+  renderPOIs();
+  onSettingsChange();
+}
+
+function removePOI(i) {
+  state.pois.splice(i, 1);
+  renderPOIs();
+  onSettingsChange();
+}
+
+function renderPOIs() {
+  const el = document.getElementById('poiList');
+  el.innerHTML = '';
+  state.pois.forEach((p, i) => {
+    el.innerHTML += `
+      <div class="poi-item">
+        <div class="poi-dot"></div>
+        <div class="poi-info">
+          <div class="poi-name">${p.name}</div>
+          <div class="poi-coords">${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}</div>
+        </div>
+        <button class="poi-del" onclick="removePOI(${i})">✕</button>
+      </div>`;
+  });
+}
+
+// ══════════════════════════════════════════
+// SUGGEST FROM GPX + OVERPASS FALLBACK
+// ══════════════════════════════════════════
+function toggleSuggest() {
+  state.suggestActive = !state.suggestActive;
+  document.getElementById('suggestBtn').classList.toggle('active', state.suggestActive);
+  const results = document.getElementById('suggestResults');
+  if (state.suggestActive) {
+    results.classList.add('visible');
+    renderSuggestions();
+  } else {
+    results.classList.remove('visible');
+    state.dayOverrides = {};
+  }
+}
+
+// Find closest N waypoints to a point within maxKm
+function nearestWaypoints(point, waypoints, maxKm = 15, topN = 4) {
+  return waypoints
+    .map(wpt => ({ ...wpt, dist: haversine(point, wpt) }))
+    .filter(wpt => wpt.dist <= maxKm)
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, topN);
+}
+
+// ── Overpass query builder ──
+function buildOverpassQuery(lat, lon, accom, radiusM = 15000) {
+  // Tags per accommodation type
+  const tagSets = {
+    campsite: [
+      'tourism=camp_site',
+      'tourism=caravan_site',
+      'leisure=nature_reserve amenity=camping',
+    ],
+    wild: [
+      'tourism=camp_site access=yes',
+      'tourism=wilderness_hut',
+      'amenity=shelter',
+    ],
+    hotel: [
+      'tourism=hotel',
+      'tourism=hostel',
+      'tourism=guest_house',
+      'tourism=motel',
+      'tourism=bed_and_breakfast',
+    ],
+  };
+  const tags = tagSets[accom] || tagSets['campsite'];
+  // Build union of node/way/relation queries
+  const queries = tags.map(tag => {
+    const parts = tag.split(' ');
+    const filters = parts.map(p => {
+      const [k, v] = p.split('=');
+      return v ? `["${k}"="${v}"]` : `["${k}"]`;
+    }).join('');
+    return `node${filters}(around:${radiusM},${lat},${lon});`;
+  });
+  return '[out:json][timeout:10];(\n' + queries.join('\n') + '\n);out body 8;';
+}
+
+async function fetchOverpass(lat, lon, accom) {
+  const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)},${accom}`;
+  if (state.overpassCache[cacheKey]) return state.overpassCache[cacheKey];
+
+  const query = buildOverpassQuery(lat, lon, accom);
+  const url = 'https://overpass-api.de/api/interpreter';
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      body: 'data=' + encodeURIComponent(query),
+    });
+    if (!res.ok) throw new Error('Overpass HTTP ' + res.status);
+    const json = await res.json();
+    const results = (json.elements || []).map(el => {
+      const tags = el.tags || {};
+      const name = tags.name || tags['name:en'] || tags.operator || 'Unnamed';
+      return {
+        lat: el.lat, lon: el.lon,
+        name, sym: '', type: accom, desc: '',
+        category: accom,
+        dist: haversine({ lat, lon }, { lat: el.lat, lon: el.lon }),
+        source: 'osm',
+      };
+    }).sort((a, b) => a.dist - b.dist).slice(0, 4);
+    state.overpassCache[cacheKey] = results;
+    return results;
+  } catch (err) {
+    console.warn('Overpass error:', err);
+    return [];
+  }
+}
+
+// ── Main render — async, handles both GPX wpts and Overpass fallback ──
+async function renderSuggestions() {
+  const body = document.getElementById('suggestResultsBody');
+  body.innerHTML = '';
+
+  if (!state.plan || !state.plan.days.length) {
+    body.innerHTML = '<div class="no-suggestions">Generate a trip plan first.</div>';
+    return;
+  }
+
+  window._suggestNearby = {};
+
+  // Render a skeleton card per day immediately, then fill async
+  state.plan.days.forEach(day => {
+    const div = document.createElement('div');
+    div.className = 'day-suggestion';
+    div.id = `dsugg-${day.dayNum}`;
+    div.innerHTML = `
+      <div class="day-suggestion-head">
+        <div class="day-suggestion-color" style="background:${day.color}"></div>
+        <div class="day-suggestion-label">Day ${day.dayNum}${day.date ? ' — ' + day.date : ''}</div>
+        <div class="day-suggestion-dist">${day.km.toFixed(0)} km</div>
+      </div>
+      <div class="suggestion-options" id="sopts-${day.dayNum}">
+        <div class="no-suggestions" style="opacity:0.5">Searching…</div>
+      </div>`;
+    body.appendChild(div);
+  });
+
+  // Fill each day card
+  for (const day of state.plan.days) {
+    const endPt = day.points[day.points.length - 1];
+
+    // 1. Check GPX embedded waypoints first
+    let nearby = nearestWaypoints(endPt, state.gpxWaypoints, 15, 4);
+    let source = 'gpx';
+
+    // 2. Fallback to Overpass if nothing found in GPX
+    if (nearby.length === 0) {
+      source = 'osm';
+      nearby = await fetchOverpass(endPt.lat, endPt.lon, state.accommodation);
+    }
+
+    window._suggestNearby[day.dayNum] = nearby;
+    const chosen = state.dayOverrides[day.dayNum];
+
+    const optsEl = document.getElementById(`sopts-${day.dayNum}`);
+    if (!optsEl) continue;
+
+    if (nearby.length === 0) {
+      optsEl.innerHTML = `<div class="no-suggestions">Nothing found within 15 km.</div>`;
+      continue;
+    }
+
+    const sourceLabel = source === 'osm'
+      ? '<span class="source-badge osm">OpenStreetMap</span>'
+      : '<span class="source-badge gpx">From GPX</span>';
+
+    optsEl.innerHTML = sourceLabel + nearby.map((wpt, i) => `
+      <div class="suggestion-opt ${chosen && chosen.name === wpt.name ? 'selected' : ''}"
+           onclick="selectSuggestion(${day.dayNum}, ${i})">
+        <span class="so-icon">${wptIcon(wpt.category)}</span>
+        <span class="so-name" title="${escStr(wpt.name)}">${wpt.name}</span>
+        <span class="so-dist">${wpt.dist.toFixed(1)} km</span>
+      </div>`).join('');
+  }
+}
+
+function escStr(s) {
+  if (!s) return '';
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;');
+}
+
+function selectSuggestion(dayNum, idx) {
+  const nearby = window._suggestNearby?.[dayNum] || [];
+  const wpt = nearby[idx];
+  if (!wpt) return;
+  if (state.dayOverrides[dayNum]?.name === wpt.name) {
+    delete state.dayOverrides[dayNum];
+  } else {
+    state.dayOverrides[dayNum] = wpt;
+  }
+  renderSuggestions();
+  drawRoute(true);
+}
+
+// ══════════════════════════════════════════
+// LIVE SETTINGS LISTENER
+// ══════════════════════════════════════════
+
+let liveDebounce = null;
+
+function onSettingsChange() {
+  if (!state.gpxFiles.length) { drawEmpty(); return; }
+  state.liveEnabled = true;
+  document.getElementById('liveBadge').classList.add('visible');
+  clearTimeout(liveDebounce);
+  liveDebounce = setTimeout(() => generatePlan(true), 320);
+}
+
+['maxKm','maxHours','avgSpeed','stopsPerDay','startDate'].forEach(id => {
+  document.getElementById(id).addEventListener('input', onSettingsChange);
+  document.getElementById(id).addEventListener('change', onSettingsChange);
+});
+
+// ══════════════════════════════════════════
+// TRIP PLANNING ENGINE
+// ══════════════════════════════════════════
+function generatePlan(silent = false) {
+  if (!state.gpxFiles.length) {
+    if (!silent) showToast('Upload at least one GPX file first');
+    return;
+  }
+
+  const maxKm      = parseFloat(document.getElementById('maxKm').value) || 300;
+  const maxHours   = parseFloat(document.getElementById('maxHours').value) || 6;
+  const avgSpeed   = parseFloat(document.getElementById('avgSpeed').value) || 60;
+  const stopsPerDay= parseInt(document.getElementById('stopsPerDay').value) || 0;
+  const startDate  = document.getElementById('startDate').value;
+
+  const allPoints  = getAllPoints();
+  const maxByTime  = maxHours * avgSpeed;
+  const effectiveMax = Math.min(maxKm, maxByTime);
+
+  const days = [];
+  let cur = { points: [], km: 0 };
+  let dayIndex = 0;
+
+  for (let i = 0; i < allPoints.length; i++) {
+    cur.points.push(allPoints[i]);
+    if (i > 0) {
+      cur.km += haversine(allPoints[i-1], allPoints[i]);
+      if (cur.km >= effectiveMax && i < allPoints.length - 1) {
+        finalizeDay(cur, dayIndex, startDate, avgSpeed, stopsPerDay);
+        days.push(cur);
+        dayIndex++;
+        cur = { points: [allPoints[i]], km: 0 };
+      }
+    }
+  }
+  if (cur.points.length > 1) {
+    finalizeDay(cur, dayIndex, startDate, avgSpeed, stopsPerDay);
+    days.push(cur);
+  }
+
+  const totalKm = totalDistance(allPoints);
+  state.plan = { days, totalKm, pois: [...state.pois] };
+
+  renderPlan();
+  drawRoute(true);
+
+  if (!silent) showToast(`${days.length} days · ${totalKm.toFixed(0)} km total`, 'success');
+  document.getElementById('exportBtn').style.display = '';
+  document.getElementById('statsBar').classList.add('visible');
+  if (state.suggestActive) renderSuggestions();
+}
+
+function finalizeDay(day, idx, startDate, avgSpeed, stopsPerDay) {
+  day.color       = DAY_COLORS[idx % DAY_COLORS.length];
+  day.dayNum      = idx + 1;
+  day.estHours    = (day.km / avgSpeed).toFixed(1);
+  day.stops       = stopsPerDay;
+  day.accommodation = state.accommodation;
+  if (startDate) {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + idx);
+    day.date = d.toISOString().split('T')[0];
+  } else {
+    day.date = null;
+  }
+}
+
+// ══════════════════════════════════════════
+// RENDER LEGEND + STATS
+// ══════════════════════════════════════════
+function renderPlan() {
+  const { days, totalKm, pois } = state.plan;
+  const accomIcons = { wild:'🏕️ Wild', campsite:'⛺ Campsite', hotel:'🏨 Hotel' };
+
+  const leg = document.getElementById('legendItems');
+  leg.innerHTML = '';
+  days.forEach(d => {
+    leg.innerHTML += `
+      <div class="dl-item">
+        <div class="dl-color" style="background:${d.color}"></div>
+        <div>
+          <div class="dl-day">Day ${d.dayNum}${d.date?` <span class="dl-date">${d.date}</span>`:''}</div>
+          <div class="dl-km">${d.km.toFixed(0)} km · ~${d.estHours}h</div>
+        </div>
+      </div>`;
+  });
+  document.getElementById('dayLegend').classList.add('visible');
+
+  document.getElementById('statTotal').textContent   = totalKm.toFixed(0);
+  document.getElementById('statDays').textContent    = days.length;
+  document.getElementById('statAvgDay').textContent  = (totalKm / days.length).toFixed(0);
+  document.getElementById('statPOIs').textContent    = pois.length;
+  document.getElementById('statAccom').textContent   = accomIcons[state.accommodation] || state.accommodation;
+
+  const eff = Math.min(
+    parseFloat(document.getElementById('maxKm').value)||300,
+    (parseFloat(document.getElementById('maxHours').value)||6)*(parseFloat(document.getElementById('avgSpeed').value)||60)
+  );
+  document.getElementById('previewHint').textContent =
+    `${days.length} days · ${totalKm.toFixed(0)} km · max ${eff.toFixed(0)} km/day`;
+}
+
+// ══════════════════════════════════════════
+// CANVAS DRAWING
+// ══════════════════════════════════════════
+function initMap() {
+  if (window._map) return; // already initialised
+  const map = L.map('map-canvas', {
+    center: [48, 10],
+    zoom: 5,
+    zoomControl: true,
+  });
+  // Dark-styled OSM tiles via CartoDB dark matter
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 19,
+  }).addTo(map);
+  window._map = map;
+  window._mapLayers = []; // track all route layers for easy removal
+}
+
+function clearMapLayers() {
+  if (!window._map) return;
+  (window._mapLayers || []).forEach(l => window._map.removeLayer(l));
+  window._mapLayers = [];
+}
+
+function addLayer(layer) {
+  if (!window._map) return;
+  layer.addTo(window._map);
+  window._mapLayers.push(layer);
+}
+
+function makeCircleIcon(color, label) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      width:28px;height:28px;border-radius:50%;
+      background:${color};border:2px solid #fff;
+      box-shadow:0 0 8px ${color}99;
+      display:flex;align-items:center;justify-content:center;
+      font-size:11px;font-weight:700;color:#fff;
+      font-family:'Barlow Condensed',sans-serif;
+    ">${label}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+  });
+}
+
+function makeEmojiIcon(emoji, color) {
+  return L.divIcon({
+    className: '',
+    html: `<div style="
+      font-size:20px;line-height:1;
+      filter:drop-shadow(0 1px 3px ${color}99);
+    ">${emoji}</div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+}
+
+function drawEmpty() {
+  if (!window._map) initMap();
+  clearMapLayers();
+  document.getElementById('mapPlaceholder').style.display = 'flex';
+  document.getElementById('dayLegend').classList.remove('visible');
+  document.getElementById('statsBar').classList.remove('visible');
+  document.getElementById('exportBtn').style.display = 'none';
+  document.getElementById('previewHint').textContent = 'Upload a GPX to get started';
+}
+
+function drawRoute(withPlan) {
+  if (!window._map) initMap();
+  clearMapLayers();
+
+  const allPoints = getAllPoints();
+  if (!allPoints.length) { drawEmpty(); return; }
+  document.getElementById('mapPlaceholder').style.display = 'none';
+
+  const bounds = [];
+
+  if (withPlan && state.plan?.days.length) {
+    // ── Draw each day as a colored polyline ──
+    state.plan.days.forEach(day => {
+      const latlngs = day.points.map(p => [p.lat, p.lon]);
+      latlngs.forEach(ll => bounds.push(ll));
+
+      // Glow / shadow line
+      addLayer(L.polyline(latlngs, {
+        color: day.color,
+        weight: 7,
+        opacity: 0.25,
+        lineCap: 'round',
+        lineJoin: 'round',
+      }));
+      // Main line (click to show elevation)
+      const mainLine = L.polyline(latlngs, {
+        color: day.color,
+        weight: 3.5,
+        opacity: 0.95,
+        lineCap: 'round',
+        lineJoin: 'round',
+      });
+      mainLine.on('click', () => showElevProfile(day.dayNum));
+      mainLine.bindTooltip('Day ' + day.dayNum + ' — ' + day.km.toFixed(0) + ' km · click for elevation', { sticky: true });
+      addLayer(mainLine);
+
+      // Overnight marker at end of day
+      const last = day.points[day.points.length - 1];
+      const accomEmoji = {wild:'🏕️', campsite:'⛺', hotel:'🏨'}[day.accommodation] || '📍';
+      const marker = L.marker([last.lat, last.lon], {
+        icon: makeCircleIcon(day.color, `D${day.dayNum}`),
+        zIndexOffset: 100,
+      });
+      marker.on('click', () => showElevProfile(day.dayNum)).bindPopup(`
+        <b>Day ${day.dayNum}${day.date ? ' — ' + day.date : ''}</b><br>
+        ${day.km.toFixed(0)} km · ~${day.estHours}h<br>
+        ${accomEmoji} ${({wild:'Wild camp',campsite:'Campsite',hotel:'Hotel'})[day.accommodation]}
+      `);
+      addLayer(marker);
+
+      // If there's a GPX/OSM suggestion override, draw it
+      const override = state.dayOverrides[day.dayNum];
+      if (override) {
+        // Dashed connector line
+        addLayer(L.polyline([[last.lat, last.lon],[override.lat, override.lon]], {
+          color: day.color,
+          weight: 1.5,
+          opacity: 0.6,
+          dashArray: '5, 6',
+        }));
+        // Override marker
+        const overrideMarker = L.marker([override.lat, override.lon], {
+          icon: makeEmojiIcon(wptIcon(override.category), var_accent2),
+          zIndexOffset: 200,
+        }).bindPopup(`
+          <b>${override.name}</b><br>
+          ${wptIcon(override.category)} ${override.category}<br>
+          ${override.dist.toFixed(1)} km from day end
+        `);
+        addLayer(overrideMarker);
+        bounds.push([override.lat, override.lon]);
+      }
+    });
+  } else {
+    // ── Plain preview (no plan yet) ──
+    const latlngs = allPoints.map(p => [p.lat, p.lon]);
+    latlngs.forEach(ll => bounds.push(ll));
+    addLayer(L.polyline(latlngs, { color: '#e8500a', weight: 7, opacity: 0.2, lineCap: 'round' }));
+    addLayer(L.polyline(latlngs, { color: '#e8500a', weight: 3, opacity: 0.9, lineCap: 'round' }));
+  }
+
+  // ── Start marker ──
+  const start = allPoints[0];
+  addLayer(L.marker([start.lat, start.lon], {
+    icon: makeCircleIcon('#4caf6e', 'S'),
+    zIndexOffset: 300,
+  }).bindPopup('<b>Start</b>'));
+  bounds.push([start.lat, start.lon]);
+
+  // ── End marker ──
+  const end = allPoints[allPoints.length - 1];
+  addLayer(L.marker([end.lat, end.lon], {
+    icon: makeCircleIcon('#f44336', 'E'),
+    zIndexOffset: 300,
+  }).bindPopup('<b>End</b>'));
+  bounds.push([end.lat, end.lon]);
+
+  // ── User POIs ──
+  state.pois.forEach(poi => {
+    addLayer(L.marker([poi.lat, poi.lon], {
+      icon: makeEmojiIcon('📍', var_accent2),
+      zIndexOffset: 150,
+    }).bindPopup(`<b>${poi.name}</b>`));
+    bounds.push([poi.lat, poi.lon]);
+  });
+
+  // ── Fit map to all content ──
+  if (bounds.length) {
+    window._map.fitBounds(bounds, { padding: [32, 32], animate: true });
+  }
+}
+
+// ══════════════════════════════════════════
+// GPX EXPORT — one file per day
+// ══════════════════════════════════════════
+const accomNames = { wild:'Wild Camping', campsite:'Campsite', hotel:'Hotel' };
+
+function buildDayGPX(day, pois) {
+  // Build filename: date_day-N.gpx  or  day-N.gpx if no date
+  const datePrefix = day.date ? day.date : null;
+  const filename = datePrefix
+    ? `${datePrefix}_day-${day.dayNum}.gpx`
+    : `day-${day.dayNum}.gpx`;
+
+  // Overnight waypoint — use GPX suggestion override if selected, else end of track
+  const override = state.dayOverrides[day.dayNum];
+  const overnightPt = override || day.points[day.points.length - 1];
+  const last = day.points[day.points.length - 1];
+  const sym = override
+    ? (override.category === 'hotel' ? 'Lodging' : 'Campground')
+    : (day.accommodation === 'hotel' ? 'Lodging' : 'Campground');
+  const overnightName = override
+    ? override.name
+    : `Night ${day.dayNum}${day.date ? ' (' + day.date + ')' : ''}`;
+
+  let xml = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="MotoRoute Planner"
+  xmlns="http://www.topografix.com/GPX/1/1"
+  xmlns:moto="http://motoroute.app/gpx/1.0">
+  <metadata>
+    <name>Day ${day.dayNum}${day.date ? ' — ' + day.date : ''}</name>
+    <desc>${day.km.toFixed(0)} km · ~${day.estHours}h · ${accomNames[day.accommodation]}</desc>
+  </metadata>
+  <trk>
+    <name>Day ${day.dayNum}${day.date ? ' — ' + day.date : ''}</name>
+    <extensions>
+      <moto:color>${day.color}</moto:color>
+      <moto:day>${day.dayNum}</moto:day>
+      <moto:accommodation>${day.accommodation}</moto:accommodation>
+      <moto:distanceKm>${day.km.toFixed(2)}</moto:distanceKm>
+      <moto:estimatedHours>${day.estHours}</moto:estimatedHours>
+    </extensions>
+    <trkseg>\n`;
+
+  day.points.forEach(p => {
+    xml += `      <trkpt lat="${p.lat.toFixed(7)}" lon="${p.lon.toFixed(7)}">`;
+    if (p.ele) xml += `\n        <ele>${p.ele.toFixed(1)}</ele>`;
+    if (p.time) xml += `\n        <time>${p.time}</time>`;
+    xml += `\n      </trkpt>\n`;
+  });
+
+  xml += `    </trkseg>
+  </trk>
+  <!-- Overnight stop -->
+  <wpt lat="${overnightPt.lat.toFixed(7)}" lon="${overnightPt.lon.toFixed(7)}">
+    <name>${overnightName}</name>
+    <sym>${sym}</sym>
+    <type>${override ? (override.category !== 'unknown' ? accomNames[override.category] : 'Overnight') : accomNames[day.accommodation]}</type>
+  </wpt>\n`;
+
+  // Include any POIs (in all day files, so they're always visible)
+  pois.forEach(poi => {
+    xml += `  <wpt lat="${poi.lat.toFixed(7)}" lon="${poi.lon.toFixed(7)}">
+    <name>${poi.name}</name>
+    <sym>Pin</sym>
+    <type>POI</type>
+  </wpt>\n`;
+  });
+
+  xml += `</gpx>`;
+  return { filename, xml };
+}
+
+function downloadFile(filename, content, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: mime }));
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+async function exportAllDays() {
+  if (!state.plan) { showToast('Generate a plan first'); return; }
+  const { days, pois } = state.plan;
+
+  if (days.length === 1) {
+    // Single day — just download immediately
+    const { filename, xml } = buildDayGPX(days[0], pois);
+    downloadFile(filename, xml, 'application/gpx+xml');
+    showToast(`Exported ${filename}`, 'success');
+    return;
+  }
+
+  // Multiple days — stagger downloads slightly so browser doesn't block them
+  showToast(`Downloading ${days.length} GPX files…`);
+  for (let i = 0; i < days.length; i++) {
+    await new Promise(res => setTimeout(res, i * 300));
+    const { filename, xml } = buildDayGPX(days[i], pois);
+    downloadFile(filename, xml, 'application/gpx+xml');
+  }
+  setTimeout(() => showToast(`${days.length} GPX files exported ✓`, 'success'), days.length * 300 + 200);
+}
+
+// ══════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast' + (type?' '+type:'');
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// ══════════════════════════════════════════
+// ELEVATION PROFILE
+// ══════════════════════════════════════════
+
+function showElevProfile(dayNum) {
+  if (!state.plan) return;
+  const day = state.plan.days.find(d => d.dayNum === dayNum);
+  if (!day) return;
+  const panel = document.getElementById('elevPanel');
+  panel.classList.add('visible');
+  if (window._map) setTimeout(() => window._map.invalidateSize(), 60);
+  renderElevTabs(dayNum);
+  drawElevChart(day);
+}
+
+function closeElevPanel() {
+  document.getElementById('elevPanel').classList.remove('visible');
+  if (window._map) setTimeout(() => window._map.invalidateSize(), 60);
+}
+
+function renderElevTabs(activeDayNum) {
+  if (!state.plan) return;
+  const tabs = document.getElementById('elevDayTabs');
+  tabs.innerHTML = '';
+  state.plan.days.forEach(day => {
+    const tab = document.createElement('button');
+    tab.className = 'elev-tab' + (day.dayNum === activeDayNum ? ' active' : '');
+    tab.textContent = 'D' + day.dayNum;
+    if (day.dayNum === activeDayNum) tab.style.background = day.color;
+    tab.onclick = () => showElevProfile(day.dayNum);
+    tabs.appendChild(tab);
+  });
+}
+
+function drawElevChart(day) {
+  const canvas  = document.getElementById('elevCanvas');
+  const wrap    = canvas.parentElement;
+  const statsEl = document.getElementById('elevStats');
+  const hintEl  = document.getElementById('elevHint');
+  const titleEl = document.getElementById('elevTitle');
+
+  canvas.width  = wrap.clientWidth - 105;
+  canvas.height = wrap.clientHeight;
+  const ctx = canvas.getContext('2d');
+
+  titleEl.textContent = 'Day ' + day.dayNum + (day.date ? ' — ' + day.date : '');
+  const hasEle = day.points.some(p => p.ele && p.ele !== 0);
+  hintEl.textContent = day.km.toFixed(0) + ' km · ~' + day.estHours + 'h'
+    + (hasEle ? '' : ' · no elevation data in GPX');
+
+  ctx.fillStyle = '#0d0e0f';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (!hasEle) {
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.font = '12px Barlow, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('No elevation data in this GPX file', canvas.width / 2, canvas.height / 2);
+    statsEl.innerHTML = '';
+    canvas.onmousemove = null;
+    return;
+  }
+
+  // Build cumulative distance series
+  const series = [];
+  let cumDist = 0;
+  for (let i = 0; i < day.points.length; i++) {
+    if (i > 0) cumDist += haversine(day.points[i-1], day.points[i]);
+    series.push({ d: cumDist, e: day.points[i].ele });
+  }
+  // Downsample if huge
+  const maxPts = 600;
+  const step = Math.ceil(series.length / maxPts);
+  const sampled = series.filter((_, i) => i % step === 0);
+  if (sampled[sampled.length-1] !== series[series.length-1]) sampled.push(series[series.length-1]);
+
+  const minE = Math.min(...sampled.map(p => p.e));
+  const maxE = Math.max(...sampled.map(p => p.e));
+  const totalD = sampled[sampled.length-1].d;
+  const eRange = (maxE - minE) || 1;
+  const pad = { top:16, right:12, bottom:26, left:46 };
+  const W = canvas.width  - pad.left - pad.right;
+  const H = canvas.height - pad.top  - pad.bottom;
+
+  const toX = d  => pad.left + (d / totalD) * W;
+  const toY = el => pad.top  + H - ((el - minE) / eRange) * H;
+
+  // Grid
+  const gridN = 4;
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 1;
+  ctx.fillStyle = 'rgba(255,255,255,0.28)'; ctx.font = '9px Barlow,sans-serif'; ctx.textAlign = 'right';
+  for (let i = 0; i <= gridN; i++) {
+    const el = minE + (eRange / gridN) * i;
+    const y = toY(el);
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(pad.left + W, y); ctx.stroke();
+    ctx.fillText(Math.round(el) + 'm', pad.left - 4, y + 3);
+  }
+  // X labels
+  const xN = Math.min(6, Math.floor(totalD / 15));
+  ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  for (let i = 0; i <= xN; i++) {
+    const d = (totalD / xN) * i;
+    ctx.fillText(Math.round(d) + 'km', toX(d), canvas.height - 7);
+  }
+
+  // Fill gradient
+  const grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + H);
+  grad.addColorStop(0, day.color + 'bb');
+  grad.addColorStop(1, day.color + '08');
+  ctx.beginPath();
+  ctx.moveTo(toX(sampled[0].d), toY(sampled[0].e));
+  sampled.forEach(p => ctx.lineTo(toX(p.d), toY(p.e)));
+  ctx.lineTo(toX(sampled[sampled.length-1].d), pad.top + H);
+  ctx.lineTo(pad.left, pad.top + H);
+  ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  // Profile line
+  ctx.beginPath();
+  sampled.forEach((p, i) => i === 0 ? ctx.moveTo(toX(p.d), toY(p.e)) : ctx.lineTo(toX(p.d), toY(p.e)));
+  ctx.strokeStyle = day.color; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  ctx.shadowColor = day.color; ctx.shadowBlur = 5;
+  ctx.stroke(); ctx.shadowBlur = 0;
+
+  // Stats
+  let gain = 0, loss = 0;
+  for (let i = 1; i < day.points.length; i++) {
+    const diff = day.points[i].ele - day.points[i-1].ele;
+    if (diff > 0) gain += diff; else loss += Math.abs(diff);
+  }
+  statsEl.innerHTML =
+    '<div class="elev-stat"><div class="elev-stat-val">' + Math.round(maxE) + 'm</div><div class="elev-stat-label">Max elev</div></div>' +
+    '<div class="elev-stat"><div class="elev-stat-val">' + Math.round(minE) + 'm</div><div class="elev-stat-label">Min elev</div></div>' +
+    '<div class="elev-stat"><div class="elev-stat-val" style="color:#4caf6e">+' + Math.round(gain) + 'm</div><div class="elev-stat-label">Ascent</div></div>' +
+    '<div class="elev-stat"><div class="elev-stat-val" style="color:#f44336">-' + Math.round(loss) + 'm</div><div class="elev-stat-label">Descent</div></div>';
+
+  // Store for hover
+  canvas._elevData = { sampled, day, pad, W, H, totalD, minE, eRange, toX, toY };
+  canvas.onmousemove = onElevHover;
+  canvas.onmouseleave = () => {
+    document.getElementById('elevTooltip').style.display = 'none';
+    drawElevChart(day);
+  };
+}
+
+function onElevHover(e) {
+  const canvas = e.target;
+  const data = canvas._elevData;
+  if (!data) return;
+  const { sampled, day, pad, W, H, totalD, minE, eRange, toX, toY } = data;
+
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const hoverD = ((mx - pad.left) / W) * totalD;
+  if (hoverD < 0 || hoverD > totalD) return;
+
+  const closest = sampled.reduce((a, b) => Math.abs(b.d - hoverD) < Math.abs(a.d - hoverD) ? b : a);
+  const cx = toX(closest.d), cy = toY(closest.e);
+
+  // Redraw base chart then overlay crosshair
+  drawElevChart(day);
+  const ctx = canvas.getContext('2d');
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.lineWidth = 1;
+  ctx.setLineDash([3, 4]);
+  ctx.beginPath(); ctx.moveTo(cx, pad.top); ctx.lineTo(cx, pad.top + H); ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = day.color; ctx.shadowColor = day.color; ctx.shadowBlur = 8;
+  ctx.beginPath(); ctx.arc(cx, cy, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0; ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
+
+  const tip = document.getElementById('elevTooltip');
+  tip.style.display = 'block';
+  tip.innerHTML = '<b>' + Math.round(closest.e) + 'm</b> &nbsp;&middot;&nbsp; ' + closest.d.toFixed(1) + ' km';
+  tip.style.left = Math.min(cx + 10, canvas.width - 130) + 'px';
+  tip.style.top  = Math.max(cy - 30, 4) + 'px';
+}
+
+function autoShowElevation() {
+  if (state.plan && state.plan.days.length) showElevProfile(1);
+}
+
+// ══════════════════════════════════════════
+// Initialise map immediately so tiles load
+// ══════════════════════════════════════════
+// Initialise map immediately so tiles load
+initMap();
+
+window.addEventListener('resize', () => {
+  if (window._map) window._map.invalidateSize();
+});
+
+</script>
+</body>
+</html>
