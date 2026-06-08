@@ -147,6 +147,14 @@
   .source-badge.gpx { background: rgba(232,80,10,0.15); color: var(--accent); border: 1px solid rgba(232,80,10,0.3); }
   .source-badge.osm { background: rgba(76,175,110,0.15); color: var(--success); border: 1px solid rgba(76,175,110,0.3); }
 
+  /* SUGGEST RADIUS BAR */
+  .suggest-radius-bar { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.5rem; padding: 0.42rem 0.65rem; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; }
+  .srb-label { font-size: 0.63rem; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; font-family: "Barlow Condensed", sans-serif; }
+  .srb-options { display: flex; gap: 0.28rem; }
+  .srb-opt { padding: 0.18rem 0.5rem; border-radius: 3px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-family: "Barlow Condensed", sans-serif; font-weight: 700; font-size: 0.67rem; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
+  .srb-opt:hover { border-color: var(--accent2); color: var(--text); }
+  .srb-opt.active { background: var(--accent2); border-color: var(--accent2); color: #000; }
+
   /* POI */
   .poi-list { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.55rem; }
   .poi-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 0.45rem 0.65rem; display: flex; gap: 0.5rem; align-items: center; }
@@ -312,10 +320,19 @@
           <button class="suggest-btn" id="suggestBtn" onclick="toggleSuggest()">
             <span class="sb-icon">&#10024;</span>
             <span class="sb-text">
-              <div class="sb-title">Suggest from GPX</div>
-              <div class="sb-sub">Match overnight stops to waypoints in your GPX files</div>
+              <div class="sb-title">Suggest overnight stops</div>
+              <div class="sb-sub">Search GPX waypoints &amp; OpenStreetMap near each day end</div>
             </span>
           </button>
+          <div class="suggest-radius-bar" id="suggestRadiusBar" style="display:none">
+            <span class="srb-label">Search radius</span>
+            <div class="srb-options">
+              <button class="srb-opt active" data-km="15" onclick="setSearchRadius(this)">15 km</button>
+              <button class="srb-opt" data-km="20" onclick="setSearchRadius(this)">20 km</button>
+              <button class="srb-opt" data-km="25" onclick="setSearchRadius(this)">25 km</button>
+              <button class="srb-opt" data-km="35" onclick="setSearchRadius(this)">35 km</button>
+            </div>
+          </div>
           <div class="suggest-results" id="suggestResults">
             <div class="suggest-results-title">Overnight suggestions per day</div>
             <div id="suggestResultsBody"></div>
@@ -406,6 +423,7 @@ const state = {
   suggestActive: false,
   dayOverrides: {},   // dayNum -> chosen waypoint
   overpassCache: {},  // 'lat,lon,accom' -> results
+  searchRadius: 15,
 };
 
 const var_accent2 = '#f5a623';
@@ -605,6 +623,7 @@ function renderPOIs() {
 function toggleSuggest() {
   state.suggestActive = !state.suggestActive;
   document.getElementById('suggestBtn').classList.toggle('active', state.suggestActive);
+  document.getElementById('suggestRadiusBar').style.display = state.suggestActive ? '' : 'none';
   const results = document.getElementById('suggestResults');
   if (state.suggestActive) {
     results.classList.add('visible');
@@ -616,6 +635,14 @@ function toggleSuggest() {
 }
 
 // Find closest N waypoints to a point within maxKm
+function setSearchRadius(el) {
+  document.querySelectorAll('.srb-opt').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  state.searchRadius = parseInt(el.dataset.km);
+  state.overpassCache = {};
+  if (state.suggestActive) renderSuggestions();
+}
+
 function nearestWaypoints(point, waypoints, maxKm = 15, topN = 4) {
   return waypoints
     .map(wpt => ({ ...wpt, dist: haversine(point, wpt) }))
@@ -659,11 +686,11 @@ function buildOverpassQuery(lat, lon, accom, radiusM = 15000) {
   return '[out:json][timeout:10];(\n' + queries.join('\n') + '\n);out body 8;';
 }
 
-async function fetchOverpass(lat, lon, accom) {
-  const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)},${accom}`;
+async function fetchOverpass(lat, lon, accom, radiusKm = 15) {
+  const cacheKey = lat.toFixed(3) + ',' + lon.toFixed(3) + ',' + accom + ',' + radiusKm;
   if (state.overpassCache[cacheKey]) return state.overpassCache[cacheKey];
 
-  const query = buildOverpassQuery(lat, lon, accom);
+  const query = buildOverpassQuery(lat, lon, accom, radiusKm * 1000);
   const url = 'https://overpass-api.de/api/interpreter';
   try {
     const res = await fetch(url, {
@@ -725,13 +752,13 @@ async function renderSuggestions() {
     const endPt = day.points[day.points.length - 1];
 
     // 1. Check GPX embedded waypoints first
-    let nearby = nearestWaypoints(endPt, state.gpxWaypoints, 15, 4);
+    let nearby = nearestWaypoints(endPt, state.gpxWaypoints, state.searchRadius, 4);
     let source = 'gpx';
 
     // 2. Fallback to Overpass if nothing found in GPX
     if (nearby.length === 0) {
       source = 'osm';
-      nearby = await fetchOverpass(endPt.lat, endPt.lon, state.accommodation);
+      nearby = await fetchOverpass(endPt.lat, endPt.lon, state.accommodation, state.searchRadius);
     }
 
     window._suggestNearby[day.dayNum] = nearby;
@@ -741,7 +768,7 @@ async function renderSuggestions() {
     if (!optsEl) continue;
 
     if (nearby.length === 0) {
-      optsEl.innerHTML = `<div class="no-suggestions">Nothing found within 15 km.</div>`;
+      optsEl.innerHTML = `<div class="no-suggestions">Nothing found within ' + state.searchRadius + ' km. Try a larger radius above.</div>';
       continue;
     }
 
