@@ -185,7 +185,7 @@
 
   /* MAP */
   .map-container { flex: 1; position: relative; overflow: hidden; min-height: 0; }
-  #map-canvas { width: 100%; height: 100%; }
+  #map-canvas { width: 100%; height: 100%; min-height: 200px; }
   .map-placeholder { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem; color: var(--muted); pointer-events: none; z-index: 500; }
   .map-placeholder-icon { font-size: 3.5rem; opacity: 0.1; }
   .map-placeholder-text { font-family: "Barlow Condensed", sans-serif; font-size: 0.9rem; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.25; }
@@ -502,16 +502,17 @@ function getAllPoints() { return state.gpxFiles.flatMap(f => f.points); }
 // ══════════════════════════════════════════
 // FILE HANDLING
 // ══════════════════════════════════════════
-const gpxInput = document.getElementById('gpxInput');
-const uploadZone = document.getElementById('uploadZone');
-
-gpxInput.addEventListener('change', e => handleFiles(e.target.files));
-uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
-uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
-uploadZone.addEventListener('drop', e => {
-  e.preventDefault(); uploadZone.classList.remove('drag-over');
-  handleFiles(e.dataTransfer.files);
-});
+function initUpload() {
+  const gpxInput = document.getElementById('gpxInput');
+  const uploadZone = document.getElementById('uploadZone');
+  gpxInput.addEventListener('change', e => handleFiles(e.target.files));
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault(); uploadZone.classList.remove('drag-over');
+    handleFiles(e.dataTransfer.files);
+  });
+}
 
 function handleFiles(files) {
   Array.from(files).forEach(file => {
@@ -822,10 +823,7 @@ function onSettingsChange() {
   liveDebounce = setTimeout(() => generatePlan(true), 320);
 }
 
-['maxKm','maxHours','startDate'].forEach(id => {
-  document.getElementById(id).addEventListener('input', onSettingsChange);
-  document.getElementById(id).addEventListener('change', onSettingsChange);
-});
+// settings listeners attached in DOMContentLoaded
 
 // ══════════════════════════════════════════
 // TRIP PLANNING ENGINE
@@ -1413,8 +1411,21 @@ function autoShowElevation() {
 // ══════════════════════════════════════════
 // Initialise map immediately so tiles load
 // ══════════════════════════════════════════
-// Initialise map immediately so tiles load
-initMap();
+document.addEventListener('DOMContentLoaded', () => {
+  initMap();
+  initUpload();
+
+  // Wire live-preview listeners for settings inputs
+  ['maxKm','maxHours','startDate'].forEach(id => {
+    document.getElementById(id).addEventListener('input', onSettingsChange);
+    document.getElementById(id).addEventListener('change', onSettingsChange);
+  });
+
+  // Init calculated avg speed display
+  const km = parseFloat(document.getElementById('maxKm').value) || 300;
+  const h  = parseFloat(document.getElementById('maxHours').value) || 6;
+  document.getElementById('avgSpeed').value = Math.round(Math.min(120, Math.max(30, km / h)));
+});
 
 window.addEventListener('resize', () => {
   if (window._map) window._map.invalidateSize();
